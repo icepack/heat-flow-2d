@@ -1,0 +1,110 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+%\usepackage{amsfonts}
+\usepackage{amsthm}
+%\usepackage{amssymb}
+%\usepackage{mathrsfs}
+%\usepackage{fullpage}
+%\usepackage{mathptmx}
+%\usepackage[varg]{txfonts}
+\usepackage{color}
+\usepackage[charter]{mathdesign}
+\usepackage[pdftex]{graphicx}
+%\usepackage{float}
+%\usepackage{hyperref}
+%\usepackage[modulo, displaymath, mathlines]{lineno}
+%\usepackage{setspace}
+%\usepackage[titletoc,toc,title]{appendix}
+\usepackage{natbib}
+\usepackage[makeroom]{cancel}
+
+%\linenumbers
+%\doublespacing
+
+\theoremstyle{definition}
+\newtheorem*{defn}{Definition}
+\newtheorem*{exm}{Example}
+
+\theoremstyle{plain}
+\newtheorem*{thm}{Theorem}
+\newtheorem*{lem}{Lemma}
+\newtheorem*{prop}{Proposition}
+\newtheorem*{cor}{Corollary}
+
+\newcommand{\argmin}{\text{argmin}}
+\newcommand{\ud}{\hspace{2pt}\mathrm{d}}
+\newcommand{\bs}{\boldsymbol}
+\newcommand{\PP}{\mathsf{P}}
+\let\divsymb=\div % rename builtin command \div to \divsymb
+\renewcommand{\div}[1]{\operatorname{div} #1} % for divergence
+\newcommand{\Id}[1]{\operatorname{Id} #1}
+
+\title{A simplified model of heat transport in glaciers}
+\author{Daniel R. Shapero}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+In this paper, we'll describe a model for the transport of the depth-averaged thermal energy within a glacier.
+This model is about in the middle of the spectrum between completely phenomenological on the one end and derived from first principles on the other.
+For simulations of glacier flow where complete faithfulness to the underlying physics is of paramount importance, modelers should use the full 3D heat transport equations.
+The model we derive here is more useful for ``quick and dirty'' simulations that just need to include the effects of horizontal advective heat transport, strain heating, heating from either bed friction or contact with the ocean, and cooling through contact with the atmosphere.
+It does not account for any vertical heat transport through the ice column.
+
+Other phenomenological models used to initialize ice flow simulations instead choose to ignore horizontal transport, but do resolve some of the vertical structure of the temperature field.
+For example, \citet{humbert2005parameter} uses a parabolic profile in the vertical and tunes the values to observations from borehole thermometry.
+These simplified approaches cannot easily be changed to also incorporate the physics of heat transport.
+Most of the heat generated through ice strain in outlet glaciers is ultimately exported out the calving terminus, rather than through either the surface or basal boundary, so including advective transport is a virtual necessity.
+
+We assume familiarity with the finite element method at the level of \citet{braess2007finite}.
+
+Let $u$ be the horizontal components of the 3D velocity field, $w$ the vertical component, and $\bar u$ the depth-averaged ice velocity.
+The condition that the full 3D velocity field is divergence-free implies that
+\begin{equation}
+    w|_{z = s} - w|_{z = b} = -h\nabla\cdot\bar u
+    \label{eq:vertical-velocity-difference}
+\end{equation}
+where $s$, $b$ are the elevations of the ice surface and base.
+
+The full weak form of the heat equation is long, so we'll write it in several parts:
+\begin{align}
+    F_{\text{internal}} & = \int_\Omega\int_b^s\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT u\cdot\nabla\phi - \rho cTw\frac{\partial\phi}{\partial z} + k\frac{\partial T}{\partial z}\cdot\frac{\partial\phi}{\partial z} - Q\phi\right\}\ud z\ud x \\
+    F_{\text{lateral}} & = \int_{\partial\Omega}\int_b^s \rho cT(u\cdot\nu + w\omega)\phi \ud z\ud\gamma \\
+    F_{\text{surface}} & = \int_\Omega\left\{\rho cT(u\cdot\nu + w\omega) + \alpha_{\text{atm}}(T - T_{\text{atm}})\right\}\cdot\phi\Big|_{z = s}\ud x \\
+    F_{\text{basal}} & = \int_\Omega\left\{\rho cT(u\cdot\nu + w\omega) + \alpha_{\text{ocn}}(T - T_{\text{ocn}}) - \rho L\dot m\right\}\cdot\phi\Big|_{z = b}\ud x
+\end{align}
+The full weak form is
+\begin{equation}
+    F_{\text{internal}} + F_{\text{lateral}} + F_{\text{surface}} + F_{\text{basal}} = 0
+    \label{eq:full-weak-form}
+\end{equation}
+for all test functions $\phi$.
+Now suppose that we're only interested in depth-averaged properties, in which case we'll consider only test functions $\phi$ that are constant in the vertical.
+Several simplifications are immediate:
+\begin{align}
+    F_{\text{internal}} & = \int_\Omega\int_b^s\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT u\cdot\nabla\phi - \cancel{\rho cTw\frac{\partial\phi}{\partial z}} + \cancel{k\frac{\partial T}{\partial z}\cdot\frac{\partial\phi}{\partial z}} - Q\phi\right\}\ud z\ud x \nonumber\\
+    & = \int_\Omega\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT\bar u\cdot\nabla\phi - Q\phi\right\}h\ud x \\
+    F_{\text{lateral}} & = \int_{\partial\Omega}\int_b^s \rho cT(u\cdot\nu + \cancel{w\omega})\phi \ud z\ud\gamma \nonumber\\
+    & = \int_{\partial\Omega}\{\rho cT(\bar u\cdot\nu)\phi\}h\ud\gamma
+\end{align}
+The surface and bottom boundary aren't quite as obvious, but we can make progress by combining them, using the fact that $\omega_{z = s} = +1$ and $\omega_{z = -b} = -1$, and equation \eqref{eq:vertical-velocity-difference}:
+\begin{equation}
+    \int_\Omega\rho cT(w_{z = s} - w_{z = b})\phi\ud x = -\int_\Omega\rho cT(\nabla\cdot\bar u)\phi h\ud x
+\end{equation}
+Combining the last three equations and expanding in the full weak form in equation \eqref{eq:full-weak-form}, we arrive at the much simpler constituents
+\begin{align}
+    F_{\text{internal}} & = \int_\Omega\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT\nabla\cdot(\phi\bar u)\right\}h\ud x \\
+    F_{\text{lateral}} & = \int_{\partial\Omega}\rho cT(\bar u\cdot\nu)\phi h\ud\gamma \\
+    F_{\text{surf + base}} & = \int_\Omega\left\{\alpha(T - T_{\text{atm}}) + \alpha_{\text{ocn}}(T - T_{\text{ocn}}) - \rho L\dot m\right\}\phi\ud x
+\end{align}
+and again the sum of these terms is zero for every (2D) test function $\phi$.
+
+\pagebreak
+
+\bibliographystyle{plainnat}
+\bibliography{heat-flow.bib}
+
+\end{document}
