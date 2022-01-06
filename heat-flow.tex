@@ -61,20 +61,12 @@ Most of the heat generated through ice strain in outlet glaciers is ultimately e
 
 We assume familiarity with the finite element method at the level of \citet{braess2007finite}.
 
-Let $u$ be the horizontal components of the 3D velocity field, $w$ the vertical component, and $\bar u$ the depth-averaged ice velocity.
-The condition that the full 3D velocity field is divergence-free implies that
-\begin{equation}
-    w|_{z = s} - w|_{z = b} = -h\nabla\cdot\bar u
-    \label{eq:vertical-velocity-difference}
-\end{equation}
-where $s$, $b$ are the elevations of the ice surface and base.
-
 The full weak form of the heat equation is long, so we'll write it in several parts:
 \begin{align}
-    F_{\text{internal}} & = \int_\Omega\int_b^s\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT u\cdot\nabla\phi - \rho cTw\frac{\partial\phi}{\partial z} + k\frac{\partial T}{\partial z}\cdot\frac{\partial\phi}{\partial z} - Q\phi\right\}\ud z\ud x \\
-    F_{\text{lateral}} & = \int_{\partial\Omega}\int_b^s \rho cT(u\cdot\nu + w\omega)\phi \ud z\ud\gamma \\
-    F_{\text{surface}} & = \int_\Omega\left\{\rho cT(u\cdot\nu + w\omega) + \alpha_{\text{atm}}(T - T_{\text{atm}})\right\}\cdot\phi\Big|_{z = s}\ud x \\
-    F_{\text{basal}} & = \int_\Omega\left\{\rho cT(u\cdot\nu + w\omega) + \alpha_{\text{ocn}}(T - T_{\text{ocn}}) - \rho L\dot m\right\}\cdot\phi\Big|_{z = b}\ud x
+    F_{\text{internal}} & = \int_\Omega\int_b^s\left\{\frac{\partial E}{\partial t}\phi - E u\cdot\nabla\phi - E w\frac{\partial\phi}{\partial z} + \frac{k}{\rho c}\frac{\partial E}{\partial z}\cdot\frac{\partial\phi}{\partial z} - Q\phi\right\}\ud z\ud x \\
+    F_{\text{lateral}} & = \int_{\partial\Omega}\int_b^s E(u\cdot\nu + w\omega)\phi \ud z\ud\gamma \\
+    F_{\text{surface}} & = \int_\Omega\left\{E(u\cdot\nu + w\omega) + q_{\text{surface}}\right\}\cdot\phi\Big|_{z = s}\ud x \\
+    F_{\text{basal}} & = \int_\Omega\left\{E(u\cdot\nu + w\omega) + q_{\text{basal}}\right\}\cdot\phi\Big|_{z = b}\ud x
 \end{align}
 The full weak form is
 \begin{equation}
@@ -82,25 +74,44 @@ The full weak form is
     \label{eq:full-weak-form}
 \end{equation}
 for all test functions $\phi$.
-Now suppose that we're only interested in depth-averaged properties, in which case we'll consider only test functions $\phi$ that are constant in the vertical.
-Several simplifications are immediate:
+
+Now suppose that we're only interested in depth-averaged properties, in which case we'll consider only test functions $\phi$ that are constant in the vertical and the depth-averaged energy $\bar E$.
+Consequently, the vertical advection and diffusion terms in $F_{\text{internal}}$ are zero, and we can symbolically evaluate the integral in $z$ to get a factor of the ice thickness:
 \begin{align}
-    F_{\text{internal}} & = \int_\Omega\int_b^s\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT u\cdot\nabla\phi - \cancel{\rho cTw\frac{\partial\phi}{\partial z}} + \cancel{k\frac{\partial T}{\partial z}\cdot\frac{\partial\phi}{\partial z}} - Q\phi\right\}\ud z\ud x \nonumber\\
-    & = \int_\Omega\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT\bar u\cdot\nabla\phi - Q\phi\right\}h\ud x \\
-    F_{\text{lateral}} & = \int_{\partial\Omega}\int_b^s \rho cT(u\cdot\nu + \cancel{w\omega})\phi \ud z\ud\gamma \nonumber\\
-    & = \int_{\partial\Omega}\{\rho cT(\bar u\cdot\nu)\phi\}h\ud\gamma
+    F_{\text{internal}} & = \int_\Omega\int_b^s\left\{\frac{\partial \bar E}{\partial t}\phi - \bar E u\cdot\nabla\phi - \cancel{\bar E w\frac{\partial\phi}{\partial z}} + \cancel{\frac{k}{\rho c}\frac{\partial \bar E}{\partial z}\cdot\frac{\partial\phi}{\partial z}} - Q\phi\right\}\ud z\ud x \nonumber\\
+    & = \int_\Omega\left\{\frac{\partial \bar E}{\partial t}\phi - \bar E\bar u\cdot\nabla\phi - \bar Q\phi\right\}h\ud x
 \end{align}
-The surface and bottom boundary aren't quite as obvious, but we can make progress by combining them, using the fact that $\omega_{z = s} = +1$ and $\omega_{z = -b} = -1$, and equation \eqref{eq:vertical-velocity-difference}:
+We've also replaced the internal heat sources $Q$ with the depth-averaged value $\bar Q$.
+Likewise, we can simplify the lateral boundary terms by taking the vertical component $\omega$ of the unit outward normal vector to be zero:
+\begin{align}
+    F_{\text{lateral}} & = \int_{\partial\Omega}\int_b^s \bar E(u\cdot\nu + \cancel{w\omega})\phi \ud z\ud\gamma \nonumber\\
+    & = \int_{\partial\Omega}\bar E(\bar u\cdot\nu)\phi h\ud\gamma
+\end{align}
+and again we have integrated out the $z$-component, which gives a factor of $h$.
+
+The surface and bottom boundary aren't quite as obvious.
+To proceed, we want to eliminate the vertical velocity from the problem.
+By integrating in $z$ the condition that the full 3D velocity field is divergence-free, we find that the difference of the vertical velocities at the surface and base can be expressed in terms of the thickness and the depth-averaged velocity:
 \begin{equation}
-    \int_\Omega\rho cT(w_{z = s} - w_{z = b})\phi\ud x = -\int_\Omega\rho cT(\nabla\cdot\bar u)\phi h\ud x
+    w|_{z = s} - w|_{z = b} = -h\nabla\cdot\bar u
+    \label{eq:vertical-velocity-difference}
 \end{equation}
-Combining the last three equations and expanding in the full weak form in equation \eqref{eq:full-weak-form}, we arrive at the much simpler constituents
+Moreover, at the ice surface and base we have that $\omega_{z = s} = +1$ and $\omega_{z = b} = -1$, and $u\cdot \nu \ll w\omega$.
+Applying these simplifications then gives
 \begin{align}
-    F_{\text{internal}} & = \int_\Omega\left\{\frac{\partial}{\partial t}\rho cT\phi - \rho cT\nabla\cdot(\phi\bar u)\right\}h\ud x \\
-    F_{\text{lateral}} & = \int_{\partial\Omega}\rho cT(\bar u\cdot\nu)\phi h\ud\gamma \\
-    F_{\text{surf + base}} & = \int_\Omega\left\{\alpha(T - T_{\text{atm}}) + \alpha_{\text{ocn}}(T - T_{\text{ocn}}) - \rho L\dot m\right\}\phi\ud x
+    F_{\text{surface}} + F_{\text{basal}} & = \int_\Omega \left\{\bar E(w|_{z = s} - w|_{z = b}) + q_{\text{surface}} + q_{\text{basal}}\right\}\phi \ud x \\
+    & = \int_\Omega\left\{-h\bar E\nabla\cdot\bar u + q_{\text{surface}} + q_{\text{basal}}\right\}\phi\ud x
 \end{align}
-and again the sum of these terms is zero for every (2D) test function $\phi$.
+for the combined surface and basal terms of the weak form.
+The final simplification is to note that
+\begin{equation}
+    \phi(\nabla\cdot \bar u) + \bar u\cdot\nabla\phi = \nabla\cdot(\phi\bar u).
+\end{equation}
+Putting all of this together, we arrive at the much simpler weak form
+\begin{equation}
+    \int_\Omega\left(h\frac{\partial\bar E}{\partial t}\phi - h\bar E\nabla\cdot(\phi\bar u) + h\bar Q + q_{\text{surface}} + q_{\text{basal}}\right)\ud x +\int_{\partial\Omega}\bar E(\bar u\cdot\nu)\phi h\ud\gamma = 0
+\end{equation}
+for every (2D) test function $\phi$.
 
 \pagebreak
 
