@@ -59,6 +59,9 @@ For example, \citet{humbert2005parameter} uses a parabolic profile in the vertic
 These simplified approaches cannot easily be changed to also incorporate the physics of heat transport.
 Most of the heat generated through ice strain in outlet glaciers is ultimately exported out the calving terminus, rather than through either the surface or basal boundary, so including advective transport is a virtual necessity.
 
+
+\section{Derivation from the weak form}
+
 We assume familiarity with the finite element method at the level of \citet{braess2007finite}.
 The full weak form of the heat equation is long, so we'll write it in several parts:
 \begin{align}
@@ -114,6 +117,43 @@ Putting all of this together, we arrive at the much simpler weak form
     \int_\Omega\left(h\frac{\partial\bar E}{\partial t}\phi - h\bar E\nabla\cdot(\phi\bar u) + h\bar Q + f_{\text{surface}} + f_{\text{basal}}\right)\ud x +\int_{\partial\Omega}\bar E(\bar u\cdot\nu)\phi h\ud\gamma = 0
 \end{equation}
 for every (2D) test function $\phi$.
+
+
+\section{Derivation from the differential form}
+
+First, we'll write the heat equation in terrain-following coordinates $x$, $y$, $\zeta = h^{-1}(z - b)$.
+Additionally we'll use $\omega$ to denote the vertical velocity in this coordinate system, which has units of inverse time and represents the relative depth through the ice column that a parcel travels in one time unit.
+Transforming the differential operators in the usual way under this coordinate mapping, the heat equation is
+\begin{equation}
+    \frac{\partial E}{\partial t} + h^{-1}\nabla\cdot hEu + \partial_\zeta E\omega - h^{-1}\partial_\zeta\alpha h^{-1}\partial_\zeta E = Q.
+    \label{eq:differential-heat-equation-3d}
+\end{equation}
+The energy density can be expanded in shifted Legendre polynomials $P_k$:
+\begin{equation}
+    E = \sum_kE_k(x, y)P_k(\zeta)
+\end{equation}
+and likewise so can the velocity.
+The product of the energy and velocity can be written as
+\begin{equation}
+    Eu = \left(\bar E(x, y)\cdot\bar u(x, y) + \ldots\right)\cdot P_0(\zeta) + \ldots
+\end{equation}
+The second set of ellipses consists of higher-order Legendre polynomials.
+These terms will all go away when we multiply by the $P_0$ and integrate by orthogonality.
+The first set of ellipses consists of products of higher-order Legendre polynomials that contribute to the 0th-order mode.
+For example, $P_1(\zeta)\cdot P_1(\zeta) = P_0 + \frac{2}{\sqrt{5}}P_2$; the product of the 1st modes contributes to the 0th mode.
+The key approximation that the products of higher modes make negligible contributes to the 0th mode.
+The worst case possible for making this approximation is the pure shallow ice approximation, which has a vertical velocity structure that looks like $1 - (1 - \zeta)^{n + 1}$ assuming constant fluidity through the whole column.
+Even in this case, the 0th mode of the velocity accounts for 3/4 of the root mean square velocity over the whole column.
+
+Multiplying equation \eqref{eq:differential-heat-equation-3d} by $h$ and integrating from $\zeta = 0$ to 1, we get that
+\begin{equation}
+    h\frac{\partial\bar E}{\partial t} + \nabla\cdot h\bar E\bar u + \left(E\omega - \frac{\alpha}{h}\frac{\partial E}{\partial\zeta}\right)\Big|_{\zeta = 0}^1 = h\bar Q.
+\end{equation}
+But the boundary conditions give us that
+\begin{equation}
+    h\frac{\partial\bar E}{\partial t} + \nabla\cdot h\bar E\bar u = h\bar Q - f_{\text{surface}} - f_{\text{basal}}.
+\end{equation}
+
 
 \pagebreak
 
