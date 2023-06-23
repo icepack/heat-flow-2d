@@ -133,6 +133,7 @@ Similarly, at the ice base, there's exchange of heat with the lithosphere or the
     \label{eq:f-basal}
 \end{equation}
 where $L$ is the latent heat of melting of ice and $\dot m$ the basal melt rate.
+(See equation 9.134 in \citet{greve2009dynamics}.)
 
 Since the domain is equal to the product of some footprint domain $\Omega$ and the interval $[0, 1]$, we can expand the energy density as the product of some horizontal modes and orthogonal polynomials in the vertical direction:
 \begin{equation}
@@ -161,9 +162,46 @@ Integrating equation \eqref{eq:differential-heat-equation-3d} from $\zeta = 0$ t
 The boundary conditions then give us that
 \begin{equation}
     \frac{\partial\bar E}{\partial t} + h^{-1}\nabla\cdot h\bar E\bar u = \bar Q - (f_{\text{surface}} + f_{\text{basal}}).
+    \label{eq:strong-form}
 \end{equation}
 where the surface and basal fluxes are the values from equations \eqref{eq:f-surface} and \eqref{eq:f-basal}.
-We can then multiply by a horizontal test function $\phi(x, y)$ to get a weak form suitable for finite element analysis.
+
+
+
+% ----------------
+\section{Numerics}
+
+To solve this problem using the finite element method, we need to derive the variational form from the strong form shown in equation \eqref{eq:strong-form}.
+The conventional approach would be to multiply by a test function $\phi$ and integrate by parts.
+If we follow this conventional approach, we will still have the $h^{-1}\nabla\cdot h\bar E\bar u$ term.
+This term is singular in the limit as $h \to 0$.
+Even if the singularity is removable in the mathematical sense, making this do sensible things is heinously awful in floating-point arithmetic.
+You can regularize away the singularity.
+In the following, I'll pursue a different approach.
+
+Since the thickness is positive throughout the domain, we can instead multiply by $h\cdot\phi$ to remove any factors of $h^{-1}$.
+You can think of this as a type of Petrov-Galerkin method.
+We can then integrate by parts to get:
+\begin{align}
+    & \int_\Omega\left(h\frac{\partial\bar E}{\partial t}\phi - h\bar E\bar u\cdot\nabla\phi\right)dx - \int_{\Gamma_{\text{out}}}h\bar E\bar u\cdot\nu\;\phi\,d\gamma \\
+    & \qquad = \int_{\Gamma_{\text{in}}}h\bar E_{\text{in}}\bar u\cdot\nu\;\phi\,d\gamma + \int_\Omega h\left(\bar Q - (f_{\text{surface}} + f_{\text{basal}})\right)\phi\; dx
+\end{align}
+where $\Gamma_{\text{in}}$, $\Gamma_{\text{out}}$ are the inflow and outflow segments of the boundary $\partial\Omega$ and $\nu$ is the unit outward normal to the boundary.
+In the limit as $h \to 0$, we get a degenerate equation that just looks like ``solve $0 = 0$ for $\bar E$.
+This is not good, but it's not as horrible as having a removable singularity.
+It is possible get a sensible solution to a degenerate $0 = 0$ type of equation using by perturbing \emph{only the linearization} of the problem.
+This leaves the exact solution unperturbed, whereas the regularization methods do change the exact solution.
+
+To discretize the advective part of the equation, there are two possible approaches \citep{donea2003finite}.
+The approach taken throughout icepack is to use continuous Galerkin basis functions in space and a backward difference scheme in time.
+This approach is more costly because it involves solving a linear system at each step.
+Backward difference schemes usually have superior stability properties and can take larger timesteps than forward difference schemes.
+Alternatively, we could use discontinuous Galerkin basis functions and either forward or backward difference schemes in time.
+
+Note that the surface and basal flux terms include a relaxation of the depth-averaged energy to some linear combination of the external values.
+Leaving aside all the other terms in the equation, these relaxation terms have the form of a simple decay equation $\partial_t\bar E = -\lambda (\bar E - \bar E_{\text{ext}})$.
+No matter how the advective terms are discretized, we should use an implicit discretization for these relaxation terms.
+This means that if we use a forward difference scheme for the advective part of the equation, the overall scheme is an implicit-explicit (IMEX) method.
 
 \pagebreak
 
