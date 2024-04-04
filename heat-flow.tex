@@ -18,6 +18,7 @@
 %\usepackage[titletoc,toc,title]{appendix}
 \usepackage{natbib}
 \usepackage[makeroom]{cancel}
+\usepackage[only,llbracket,rrbracket]{stmaryrd}
 
 %\linenumbers
 %\doublespacing
@@ -55,16 +56,15 @@
     \hline
     energy density & $E$ & kJ m${}^{-3}$ & 0 \\
     horizontal velocity & $u$ & m yr${}^{-1}$ & 1 \\
-    vertical velocity & $w$ & m yr${}^{-1}$ & 0 \\
-    relative vertical velocity & $\omega$ & & 0 \\
     thickness & $h$ & m & 0 \\
     surface & $s$ & m & 0 \\
     bed & $b$ & m & 0 \\
-    horizontal normal & $\nu$ & & 1 \\
-    vertical normal & $\nu_z$ & & 1 \\
+    unit normal vector & $\nu$ & & 1 \\
     internal heat sources & $Q$ & kJ m${}^{-3}$ yr${}^{-1}$ & 0 \\
-    surface heat flux & $f_{\text{surface}}$ & kJ m${}^{-2}$ yr${}^{-1}$ & 0 \\
-    basal heat flux & $f_{\text{basal}}$ & kJ m${}^{-2}$ yr${}^{-1}$ & 0 \\
+    accumulation rate & $\dot a$ & m yr${}^{-1}$ & 0 \\
+    ablation rate & $\dot m$ & m yr${}^{-1}$ & 0 \\
+    strain rate & $\dot\varepsilon$ & yr${}^{-1}$ & 2 \\
+    membrane stress & $M$ & kJ m${}^{-3}$ & 2 \\
     \hline
 \end{tabular}
 \end{center}
@@ -73,11 +73,11 @@
 % --------------------
 \section{Introduction}
 
-In this paper, we'll describe a model for the transport of the depth-averaged thermal energy in glaciers that are approximately in plug flow.
+In this paper, we'll describe a model for the transport of the depth-averaged thermal energy in glaciers.
 This model is about in the middle of the spectrum between completely phenomenological on the one end and derived from first principles on the other.
 For simulations of glacier flow where complete faithfulness to the underlying physics is of paramount importance, modelers should use the full 3D heat transport equations.
 The model we derive here is more useful for ``quick and dirty'' simulations that just need to include the effects of horizontal advective heat transport, strain heating, heating from either bed friction or contact with the ocean, and cooling through contact with the atmosphere.
-It does not account for any vertical heat transport through the ice column.
+It accounts for vertical heat transport through the ice column, if at all, in a very blunt way.
 
 Other phenomenological models used to initialize ice flow simulations instead choose to ignore horizontal transport, but do resolve some of the vertical structure of the temperature field.
 For example, \citet{humbert2005parameter} uses a parabolic profile in the vertical and tunes the values to observations from borehole thermometry.
@@ -88,120 +88,113 @@ Most of the heat generated through ice strain in outlet glaciers is ultimately e
 % ------------------
 \section{Derivation}
 
-First, we'll write the heat equation in \emph{terrain-following coordinates}.
-This coordinate system uses a new vertical coordinate
-\begin{equation}
-    \zeta = \frac{z - b}{h}
-\end{equation}
-instead of the absolute elevation $z$.
-The terrain-following vertical coordinate takes values in $[0, 1]$, with 0 being the bed and 1 the ice surface.
-This transformation can be very advantageous for thin-film flows because the domain is now the product $\Omega \times [0, 1]$ of a 2D domain $\Omega$ and the unit interval.
-We'll use $\omega$ to denote the vertical velocity in this coordinate system, which has units of inverse time and represents the relative depth through the ice column that a parcel travels in one time unit.
+The model that we aim to describe here differs in a few key respects from conventional approaches to simulating coupled heat, mass, and momentum transport.
+The conventional approach attempts to decouple as much as possible the heat and mass transport equations because, in many uses of computational fluid mechanics, the system is either closed or of fixed volume.
+Glacier flow or other environmental thin-film flows, on the other hand, usually include sources and sinks of mass both at the upper and lower boundaries and at the upstream or downstream boundaries.
+For example, ice is advected out of the calving terminus; ice is removed from the base of a floating ice shelf by ocean melt; and ice accumulates at the surface from firn densification.
+These are very much open systems and a conventional Eulerian approach to numerical modeling, which focuses on control volumes that are fixed in space, ignores some of the hard parts.
+For example, the densification of ice into firn is a source of mass.
+But that mass also carries with it internal energy.
+A conventional numerical modeling approach might account for the first but not the second.
+To see how this plays out in the wild, look at any software package for ice flow modeling.
+The mass balance equation will of course include the accumulation and ablation rates as inputs.
+Does the heat flow or energy balance equation also include these quantities as inputs?
 
-Differential operators like the divergence of a vector field have a different expression in this curvilinear coordinate system because a derivative with respect to the terrain-following $x$, i.e. holding $\zeta$ fixed, is not the same as taking a partial derivative with respect to $x$ holding $z$ fixed.
-Transforming the differential operators in the usual way under this coordinate mapping, the heat equation is
+\subsection{DG semi-discretization}
+
+The model that we will derive below can be viewed as follows:
+\begin{enumerate}
+    \item Rewrite the heat equation in terrain-following coordinates, i.e. replace the vertical coordinate $z$ with the remapped coordinate
+        \begin{equation}
+            \zeta = \frac{z - b}{h}
+            \label{eq:terrain-following-coords}
+        \end{equation}
+        where $b$ is the elevation of the ice base and $h$ the thickness of the ice layer
+    \item Discretize the heat equation using a piecewise constant discontinuous Galerkin basis in the vertical dimension
+\end{enumerate}
+Our main innovation below is incorporating mass transport into the energy balance equation, but getting the conductive heat transport correct is not entirely obvious.
+We require that our model reproduces the vertical DG semi-discretization in order to make sure that the conductive heat transfer terms are correct.
+We suppose that the starting point is the variational form
 \begin{equation}
-    \frac{\partial E}{\partial t} + h^{-1}\nabla\cdot hEu + \partial_\zeta E\omega - h^{-1}\partial_\zeta\alpha h^{-1}\partial_\zeta E = Q.
-    \label{eq:differential-heat-equation-3d}
+    \int_b^s\left(\frac{\partial E}{\partial t}\phi + k\frac{\partial T(E)}{\partial z}\cdot\frac{\partial\phi}{\partial z} + \ldots\right)dz = 0
 \end{equation}
-We have implicitly included the approximation that advective transport dominates diffusive transport in the horizontal.
-In the vertical, both advection and diffusion can be of roughly equal importance.
-To close the system, we also need a set of boundary conditions.
-The most important part for our purposes are the top and bottom boundary conditions:
+for all test functions $\phi$ where the ellipses stands for other terms.
+We then use the coordinate transformation from equation \eqref{eq:terrain-following-coords} to rewrite this variational problem as
+\begin{equation}
+    \int_0^1\left(h\frac{\partial E}{\partial t}\phi + kh^{-1}\frac{\partial T(E)}{\partial\zeta}\frac{\partial\phi}{\partial\zeta} + \ldots\right)d\zeta = 0.
+\end{equation}
+Next, we assume that the internal energy $E$ is expanded using the $DG_p$ basis and use a symmetric interior penalty discretization of the above variational problem:
 \begin{align}
-    \left(E\omega - \frac{\alpha}{h^2}\partial_\zeta E\right)|_{\zeta = 1} & = f_{\text{surface}} \\
-    \left(E\omega - \frac{\alpha}{h^2}\partial_\zeta E\right)|_{\zeta = 0} & = -f_{\text{basal}}
+    0 & = \sum_n\int_{\zeta_n}^{\zeta_{n + 1}}\left(h\frac{\partial E}{\partial t}\phi + kh^{-1}\frac{\partial T(E)}{\partial\zeta}\frac{\partial\phi}{\partial\zeta} + \ldots\right)d\zeta \nonumber\\
+    & \quad + \sum_{\zeta_n}\left(\left\llbracket kh^{-1}\frac{\partial T(E)}{\partial\zeta}\right\rrbracket \cdot\llbracket\phi\rrbracket + \llbracket T(E)\rrbracket\cdot\left\llbracket kh^{-1}\frac{\partial\phi}{\partial\zeta}\right\rrbracket\right)\nonumber\\
+    & \qquad + \sum_{\zeta_n}\frac{\alpha}{\delta\zeta}\llbracket kh^{-1}T(E)\rrbracket\cdot\llbracket\phi\rrbracket
 \end{align}
-where $f_{\text{surface}}$ and $f_{\text{basal}}$ are the fluxes of heat at the surface and base of the ice respectively.
-\textcolor{red}{Please double check to the end of this paragraph, I have not slept properly since the birth of my son on 19 March 2023.}
-There are two sources of heat into the ice column at the surface.
-First is contact with the atmosphere.
-The conventional approach to handling this heat source is to set the temperature of the ice at the surface to be equal to the atmospheric temperature, which is a Dirichlet boundary condition, and explicitly simulate the boundary layer where the temperature adjusts to the value within the rest of the ice column.
-Instead, we'll take a bit of a hacky approach and pretend like part of the surface flux is a relaxation to the atmospheric temperature, assuming some exchange coefficient $\eta_{\text{atmos}}$.
-In the limit as $\eta$ becomes very large, we recover the Dirichlet boundary condition.
-The second flux of heat is due to the fact that there is mass and energy transfer from firn densification into ice.
-(We do not explicitly model firn here.)
-Putting these two together, we get
+where $\alpha = \max\{1, p^2\}$ is a penalty parameter dependent on the degree of the finite element basis and the double brackets denote the jump of a quantity across one of the knot points:
 \begin{equation}
-    f_{\text{surface}} = \eta_{\text{atmos}}(E - E_{\text{atmos}}) +  h^{-1}\dot a E_{\text{firn}}
-    \label{eq:f-surface}
+    \llbracket f\rrbracket = \lim_{\zeta\downarrow\zeta_n}f(\zeta) - \lim_{\zeta\uparrow\zeta_n}f(\zeta).
 \end{equation}
-where $\dot a$ is the accumulation rate of ice.
-Similarly, at the ice base, there's exchange of heat with the lithosphere or the ocean and melting:
+If we use the lowest order basis possible, i.e. piecewise constant basis functions, then any terms containing vertical derivatives are zero and we are left with the much simpler form
 \begin{equation}
-    f_{\text{basal}} = \eta_{\text{basal}}(E - E_{\text{basal}}) + h^{-1}\rho L\dot m
-    \label{eq:f-basal}
+    0 = \sum_n\int_{\zeta_n}^{\zeta_{n + 1}}\left(h\frac{\partial E}{\partial t}\phi + \ldots\right)d\zeta + \sum_{\zeta_n}\frac{\alpha}{\delta\zeta}\llbracket kh^{-1}T(E)\rrbracket\cdot\llbracket\phi\rrbracket
 \end{equation}
-where $L$ is the latent heat of melting of ice and $\dot m$ the basal melt rate.
-(See equation 9.134 in \citet{greve2009dynamics}.)
+Our model has to reduce to the previous equation when there are no sources or sinks of mass and all heat transfer is by conduction.
 
-Since the domain is equal to the product of some footprint domain $\Omega$ and the interval $[0, 1]$, we can expand the energy density as the product of some horizontal modes and orthogonal polynomials in the vertical direction:
+
+\subsection{The model}
+
+The equation we derive uses an Eulerian reference frame in the horizontal but Lagrangian in the vertical.
+In so doing, the mass balance equation and the effect of accreting or ablating ice is included in the energy equation as well.
+
+The model we derive here is a conservation law for the product of the thickness $h$ and the energy density $E$ in a single layer of the glacier.
+Moreover, we assume that horizontal diffusion is negligible, so that transport is dictated by the bulk ice velocity $u$.
+The overall model will then take the form
 \begin{equation}
-    E = \sum_kE_k(x, y)P_k(\zeta)
+    \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma = \int_\omega\text{sources}\;dx
 \end{equation}
-and likewise so can the velocity.
-The $P_k$ are the shifted Legendre polynomials; note that the 0th Legendre polynomial is just the constant function $P_0(\zeta) = 1$.
-The product of the energy and velocity can be written as
+where $\omega$ is an arbitrary control volume, $\partial\omega$ its boundary, and $\nu$ the unit outward-pointing normal vector to $\partial\omega$.
+We will fill in the sources in the following.
+In the most blunt version of the model, the single layer is the entire glacier.
+We might refine this model by using two layers, say one for basal temperate ice and another for cold ice.
+We could then subdivide each part into further layers.
+For starters, it's enough to imagine that we're devising an approximate model for the evolution of $h\cdot E$ throughout the whole glacier.
+
+To complete our description of the model, we need to describe what the sources and sinks of thickness-energy are.
+Let $\dot a$ be the accumulation rate of mass in meters/year and $E_{\dot a}$ the internal energy of the accumulated ice mass.
+For example, if we assume mass is added to the ice layer by densification of firn, then in Antarctica a reasonable rate in the interior of the continent might be $\dot a$ = 7 cm/year and $E_{\dot a}$ is the product of the ice density, specific heat capacity at constant pressure, and the temperature at the base of the firn column, which is typically on the order of 243${}^\circ$K.
+Likewise, let $\dot m$ be the rate of mass ablation and $E_{\dot m}$ the internal energy of the ablated ice mass.
+Then the sources and sinks due to accumulation and ablation are
 \begin{equation}
-    Eu = \left(\bar E(x, y)\cdot\bar u(x, y) + \ldots\right)\cdot P_0(\zeta) + \ldots
+    \text{mass exchange sources} = \dot a\,E_{\dot a} - \dot m\,E_{\dot m}.
 \end{equation}
-The second set of ellipses consists of higher-order Legendre polynomials.
-The next thing we'll do is multiply everything by $P_0$ and integrate, which will get rid of all the terms in the second set of ellipses by orthogonality.
-The first set of ellipses consists of products of higher-order Legendre polynomials that contribute to the 0th-order mode.
-For example, $P_1(\zeta)\cdot P_1(\zeta) = P_0 + \frac{2}{\sqrt{5}}P_2$; the product of the 1st modes contributes to the 0th mode.
+It's worth pointing out here that, even in the absence of ablation, the accumulation of mass can make the average energy $E$ of the column decrease provided that the accumulated ice has a lower internal energy than the rest of the column, despite the fact that the total thickness-energy product is increasing.
+Finally, we want to emphasize here that the accumulation and ablation rates are for this computational layer.
+If we are taking the layer to be the entire ice column, then these are the same as the actual accumulation and ablation rates, but if we are taking a single layer to be, say, the layer of temperate ice at the base of a polythermal glacier, then the accumulation rate for the temperate layer is the same as the rate at which is melted off from the surface cold layer.
 
-\textbf{The key approximation we make here is that the products of higher modes make negligible contributes to the 0th mode.}
-This approximation is the worst that it can possibly be under the shallow ice approximation for the velocity.
-Assuming constant fluidity throughout the whole column and the SIA, the horizontal velocity depends on $\zeta$ like $1 - (1 - \zeta)^{n + 1}$ \citep{greve2009dynamics}.
-Even in this case, the 0th mode of the velocity accounts for 3/4 of the root mean square velocity over the whole column.
-
-Integrating equation \eqref{eq:differential-heat-equation-3d} from $\zeta = 0$ to 1 and making the approximationg that $\overline{Eu} = \bar E\bar u$, we get that
+The next component that remains is to describe the sources and sinks of thickness-energy due to conductive exchange with the external environment.
+For example, a glacier experiencing no accumulation or ablation will lose heat to the atmosphere in the winter.
+We assume that the medium above the ice layer is at temperature $T_{\uparrow}$ and that the exchange coefficient with the layer above is $\sigma_{\uparrow}$, and likewise for the layer beneath.
+Then the sum rate of conductive exchange is
 \begin{equation}
-    \frac{\partial\bar E}{\partial t} + h^{-1}\nabla\cdot h\bar E\bar u + \left(E\omega - \frac{\alpha}{h^2}\frac{\partial E}{\partial\zeta}\right)\Big|_{\zeta = 0}^1 = \bar Q.
+    \text{conductive exchange sources} = h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}
 \end{equation}
-The boundary conditions then give us that
+where $T(E)$ is the temperature of the medium as a function of its internal energy density and $k$ is the thermal conductivity of ice.
+
+The final source term is strain heating, which has a comparatively simple expression:
 \begin{equation}
-    \frac{\partial\bar E}{\partial t} + h^{-1}\nabla\cdot h\bar E\bar u = \bar Q - (f_{\text{surface}} + f_{\text{basal}}).
-    \label{eq:strong-form}
+    \text{strain heating sources} = h M : \dot\varepsilon
 \end{equation}
-where the surface and basal fluxes are the values from equations \eqref{eq:f-surface} and \eqref{eq:f-basal}.
+where $M$ is the membrane stress tensor and $\dot\varepsilon$ is the strain rate tensor for the flow field.
+We assume that the ice velocity is constant with depth in each layer.
 
-
-
-% ----------------
-\section{Numerics}
-
-To solve this problem using the finite element method, we need to derive the variational form from the strong form shown in equation \eqref{eq:strong-form}.
-The conventional approach would be to multiply by a test function $\phi$ and integrate by parts.
-If we follow this conventional approach, we will still have the $h^{-1}\nabla\cdot h\bar E\bar u$ term.
-This term is singular in the limit as $h \to 0$.
-Even if the singularity is removable in the mathematical sense, making this do sensible things is heinously awful in floating-point arithmetic.
-You can regularize away the singularity.
-In the following, I'll pursue a different approach.
-
-Since the thickness is positive throughout the domain, we can instead multiply by $h\cdot\phi$ to remove any factors of $h^{-1}$.
-You can think of this as a type of Petrov-Galerkin method.
-We can then integrate by parts to get:
+Putting everything together now, the complete conservation law for the thickness-energy product is
 \begin{align}
-    & \int_\Omega\left(h\frac{\partial\bar E}{\partial t}\phi - h\bar E\bar u\cdot\nabla\phi\right)dx - \int_{\Gamma_{\text{out}}}h\bar E\bar u\cdot\nu\;\phi\,d\gamma \\
-    & \qquad = \int_{\Gamma_{\text{in}}}h\bar E_{\text{in}}\bar u\cdot\nu\;\phi\,d\gamma + \int_\Omega h\left(\bar Q - (f_{\text{surface}} + f_{\text{basal}})\right)\phi\; dx
+    & \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma = \\
+    & \qquad \int_\omega h M:\dot\varepsilon\;dx + \int_\omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)dx \\
+    & \qquad + \int_\omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}dx
 \end{align}
-where $\Gamma_{\text{in}}$, $\Gamma_{\text{out}}$ are the inflow and outflow segments of the boundary $\partial\Omega$ and $\nu$ is the unit outward normal to the boundary.
-In the limit as $h \to 0$, we get a degenerate equation that just looks like ``solve $0 = 0$ for $\bar E$.
-This is not good, but it's not as horrible as having a removable singularity.
-It is possible get a sensible solution to a degenerate $0 = 0$ type of equation using by perturbing \emph{only the linearization} of the problem.
-This leaves the exact solution unperturbed, whereas the regularization methods do change the exact solution.
+If we apply this model to many layers of ice, assuming that the energy density is constant within each layer, we reproduce the symmetric interior penalty DG discretization of the heat transport problem provided that we take the (non-dimensional) exchange coefficients between ice layers to be equal to 1.
+For conductive heat exchange with, say, air in the turbulent atmospheric boundary layer, we may want to use a much larger exchange coefficient.
 
-To discretize the advective part of the equation, there are two possible approaches \citep{donea2003finite}.
-The approach taken throughout icepack is to use continuous Galerkin basis functions in space and a backward difference scheme in time.
-This approach is more costly because it involves solving a linear system at each step.
-Backward difference schemes usually have superior stability properties and can take larger timesteps than forward difference schemes.
-Alternatively, we could use discontinuous Galerkin basis functions and either forward or backward difference schemes in time.
-
-Note that the surface and basal flux terms include a relaxation of the depth-averaged energy to some linear combination of the external values.
-Leaving aside all the other terms in the equation, these relaxation terms have the form of a simple decay equation $\partial_t\bar E = -\lambda (\bar E - \bar E_{\text{ext}})$.
-No matter how the advective terms are discretized, we should use an implicit discretization for these relaxation terms.
-This means that if we use a forward difference scheme for the advective part of the equation, the overall scheme is an implicit-explicit (IMEX) method.
 
 \pagebreak
 
