@@ -109,7 +109,7 @@ The model that we will derive below can be viewed as follows:
             \zeta = \frac{z - b}{h}
             \label{eq:terrain-following-coords}
         \end{equation}
-        where $b$ is the elevation of the ice base and $h$ the thickness of the ice layer
+        where $b$ is the elevation of the ice base and $h$ the thickness of the ice layer (see \S5.7.1 of \citet{greve2009dynamics})
     \item Discretize the heat equation using a piecewise constant discontinuous Galerkin basis in the vertical dimension
 \end{enumerate}
 Our main innovation below is incorporating mass transport into the energy balance equation, but getting the conductive heat transport correct is not entirely obvious.
@@ -149,9 +149,9 @@ The model we derive here is a conservation law for the product of the thickness 
 Moreover, we assume that horizontal diffusion is negligible, so that transport is dictated by the bulk ice velocity $u$.
 The overall model will then take the form
 \begin{equation}
-    \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma = \int_\omega\text{sources}\;dx
+    \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma + \int_{\partial\omega\cap\Gamma}h_{\text{in}}E_{\text{in}}u\cdot\nu\;d\gamma= \int_\omega\text{sources}\;dx
 \end{equation}
-where $\omega$ is an arbitrary control volume, $\partial\omega$ its boundary, and $\nu$ the unit outward-pointing normal vector to $\partial\omega$.
+where $\omega$ is an arbitrary control volume, $\partial\omega$ its boundary, $\nu$ the unit outward-pointing normal vector to $\partial\omega$, and $\Gamma$ is the segment of $\partial\Omega$ where ice is flowing in, i.e. $u\cdot\nu < 0$.
 We will fill in the sources in the following.
 In the most blunt version of the model, the single layer is the entire glacier.
 We might refine this model by using two layers, say one for basal temperate ice and another for cold ice.
@@ -179,7 +179,7 @@ Then the sum rate of conductive exchange is
 \end{equation}
 where $T(E)$ is the temperature of the medium as a function of its internal energy density and $k$ is the thermal conductivity of ice.
 
-The final source term is strain heating, which has a comparatively simple expression:
+The final volumetric source term is strain heating, which has a comparatively simple expression:
 \begin{equation}
     \text{strain heating sources} = h M : \dot\varepsilon
 \end{equation}
@@ -188,8 +188,8 @@ We assume that the ice velocity is constant with depth in each layer.
 
 Putting everything together now, the complete conservation law for the thickness-energy product is
 \begin{align}
-    & \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma = \\
-    & \qquad \int_\omega h M:\dot\varepsilon\;dx + \int_\omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)dx \\
+    & \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma = \nonumber\\
+    & \qquad \int_\omega h M:\dot\varepsilon\;dx + \int_\omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)dx \nonumber\\
     & \qquad + \int_\omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}dx
 \end{align}
 If we apply this model to many layers of ice, assuming that the energy density is constant within each layer, we reproduce the symmetric interior penalty DG discretization of the heat transport problem provided that we take the (non-dimensional) exchange coefficients between ice layers to be equal to 1.
@@ -201,9 +201,10 @@ For conductive heat exchange with, say, air in the turbulent atmospheric boundar
 We can now use standard methods to derive a variational form of the model.
 Let $\phi$ be an arbitrary test function; the variational form is
 \begin{align}
-    & \int_\Omega \left(\frac{\partial}{\partial t}hE\cdot\phi - hEu\cdot\nabla\phi\right)dx = \\
-    & \qquad \int_\Omega h M:\dot\varepsilon\cdot\phi\;dx + \int_\Omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)\phi\;dx \\
-    & \qquad + \int_\Omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}\phi\;dx.
+    & \int_\Omega \left(\frac{\partial}{\partial t}hE\cdot\phi - hEu\cdot\nabla\phi\right)dx = \nonumber\\
+    & \qquad \int_\Omega h M:\dot\varepsilon\cdot\phi\;dx + \int_\Omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)\phi\;dx \nonumber\\
+    & \qquad + \int_\Omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}\phi\;dx \nonumber\\
+    & \quad\qquad - \int_{\partial\Omega}\Big\{h_{\text{in}}E_{\text{in}}\min\{0, u\cdot\nu\} + hE\max\{0, u\cdot\nu\}\Big\}\phi\;d\gamma
 \end{align}
 This form will work so long as the layer thickness is positive.
 In the limit of zero thickness, almost every term becomes negligible.
