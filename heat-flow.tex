@@ -140,7 +140,7 @@ If we use the lowest order basis possible, i.e. piecewise constant basis functio
 Our model has to reduce to the previous equation when there are no sources or sinks of mass and all heat transfer is by conduction.
 
 
-\subsection{The model}
+\subsection{The model in conservation form}
 
 The equation we derive uses an Eulerian reference frame in the horizontal but Lagrangian in the vertical.
 In so doing, the mass balance equation and the effect of accreting or ablating ice is included in the energy equation as well.
@@ -194,6 +194,24 @@ Putting everything together now, the complete conservation law for the thickness
 \end{align}
 If we apply this model to many layers of ice, assuming that the energy density is constant within each layer, we reproduce the symmetric interior penalty DG discretization of the heat transport problem provided that we take the (non-dimensional) exchange coefficients between ice layers to be equal to 1.
 For conductive heat exchange with, say, air in the turbulent atmospheric boundary layer, we may want to use a much larger exchange coefficient.
+
+
+\subsection{The model in variational form}
+
+We can now use standard methods to derive a variational form of the model.
+Let $\phi$ be an arbitrary test function; the variational form is
+\begin{align}
+    & \int_\Omega \left(\frac{\partial}{\partial t}hE\cdot\phi - hEu\cdot\nabla\phi\right)dx = \\
+    & \qquad \int_\Omega h M:\dot\varepsilon\cdot\phi\;dx + \int_\Omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)\phi\;dx \\
+    & \qquad + \int_\Omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}\phi\;dx.
+\end{align}
+This form will work so long as the layer thickness is positive.
+In the limit of zero thickness, almost every term becomes negligible.
+The final, conductive term forces the temperature to be a weighted average of the temperatures in the media above and below.
+But trying to solve this singular problem in floating-point arithmetic is asking for trouble.
+One option might be to replace the factor of $h^{-1}$ with something like $\max\{h, h_c\}^{-1}$ where $h_c$ is some critical cut-off thickness, say 1m, below which it isn't important to resolve heat transport with precision.
+
+Is there an alternative variational form that remains well-posed even in the limit of zero ice thickness?
 
 
 \pagebreak
