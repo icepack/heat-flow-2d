@@ -41,7 +41,7 @@
 \renewcommand{\div}[1]{\operatorname{div} #1} % for divergence
 \newcommand{\Id}[1]{\operatorname{Id} #1}
 
-\title{A simplified model of heat transport in glaciers}
+\title{Monolothic solution of the coupled mass, momentum, and energy balance of glacier and lava flows}
 \author{Daniel R. Shapero}
 \date{}
 
@@ -55,14 +55,12 @@
     variable name & symbol & units & tensor rank \\
     \hline
     energy density & $E$ & kJ m${}^{-3}$ & 0 \\
-    horizontal velocity & $u$ & m yr${}^{-1}$ & 1 \\
+    velocity & $u$ & m yr${}^{-1}$ & 1 \\
     thickness & $h$ & m & 0 \\
-    surface & $s$ & m & 0 \\
-    bed & $b$ & m & 0 \\
-    unit normal vector & $\nu$ & & 1 \\
+    surface, bed & $s$, $b$ & m & 0 \\
+    unit normal vector & $n$ & & 1 \\
     internal heat sources & $Q$ & kJ m${}^{-3}$ yr${}^{-1}$ & 0 \\
-    accumulation rate & $\dot a$ & m yr${}^{-1}$ & 0 \\
-    ablation rate & $\dot m$ & m yr${}^{-1}$ & 0 \\
+    surface, basal mass balance & $\dot a_s$, $\dot a_b$ & m yr${}^{-1}$ & 0 \\
     strain rate & $\dot\varepsilon$ & yr${}^{-1}$ & 2 \\
     membrane stress & $M$ & kJ m${}^{-3}$ & 2 \\
     \hline
@@ -70,149 +68,452 @@
 \end{center}
 
 
-% --------------------
+% ====================
 \section{Introduction}
 
-In this paper, we'll describe a model for the transport of the depth-averaged thermal energy in glaciers.
-This model is about in the middle of the spectrum between completely phenomenological on the one end and derived from first principles on the other.
-For simulations of glacier flow where complete faithfulness to the underlying physics is of paramount importance, modelers should use the full 3D heat transport equations.
-The model we derive here is more useful for ``quick and dirty'' simulations that just need to include the effects of horizontal advective heat transport, strain heating, heating from either bed friction or contact with the ocean, and cooling through contact with the atmosphere.
-It accounts for vertical heat transport through the ice column, if at all, in a very blunt way.
+This paper will describe some new approaches to numerical simulation of the thermomechanics of gravity-driven, thin-film, viscous fluid flows.
+These types of problems appear all over the geophysical sciences.
+J.D. Forbes, who first correctly identified viscous deformation as the mechanism by which glaciers flow, remarked in 1848 that, ``There is something pleasing to the imagination in the unexpected analogy between the icy stream of a glacier and a fiery torrent of lava.''
+Both of these systems are extra challenging in that they exchange mass with their environment through phase changes.
 
+Our contributions are as follows.
+(1) Conventional approaches to modeling attempt as much as possible to decouple the solvers for different conservation laws by using an operator splitting approach, but this limits the temporal order of accuracy to 1 or at most 2 with special techniques that only work when there are two fields.
+We demonstrate an approach to solving for all fields at once using timestepping schemes of order 3 and higher.
+(2) Many research software packages work in Cartesian coordinates.
+We apply terrain-following coordinates, which have certain advantages in elucidating the coupling between mass and energy balance.
+(3) In each of the systems of interest, the thickness of the fluid film can go to zero -- for example in the ablation zone of a glacier, or where a lava flow has thinned and solidified.
+The energy balance equation as it is usually written ceases to be well-posed in the limit as the fluid thickness goes to zero.
+Here we demonstrate a mixed finite element approach that remains solvable in the zero-thickness limit.
+Additionally, we apply specialized discretization based on Bernstein finite elements that preserve non-negativity.
+
+Our main applications of interest are the modeling of both glacier and lava flows.
+Both of these systems have nonlinear constitutive relations -- a power law in the case of glaciers and a \textcolor{red}{Bingham plastic?} law for lava.
+Glaciers are also assumed to slide over their beds and the sliding law is nonlinear as well.
+Our interest here is on the challenge of solving the coupled mass-momentum-energy balance equations with higher-order elements and timestepping.
+We instead focus on linear viscous fluids with linear sliding laws.
+
+Finally, we derive a simplified model of heat transport in glaciers that accounts for horizontal advection of thermal energy.
 Other phenomenological models used to initialize ice flow simulations instead choose to ignore horizontal transport, but do resolve some of the vertical structure of the temperature field.
 For example, \citet{humbert2005parameter} uses a parabolic profile in the vertical and tunes the values to observations from borehole thermometry.
 These simplified approaches cannot easily be changed to also incorporate the physics of heat transport.
 Most of the heat generated through ice strain in outlet glaciers is ultimately exported out the calving terminus, rather than through either the surface or basal boundary, so including advective transport is a virtual necessity.
 
 
-% ------------------
-\section{Derivation}
+% ===============
+\section{Physics}
 
 The model that we aim to describe here differs in a few key respects from conventional approaches to simulating coupled heat, mass, and momentum transport.
 The conventional approach attempts to decouple as much as possible the heat and mass transport equations because, in many uses of computational fluid mechanics, the system is either closed or of fixed volume.
-Glacier flow or other environmental thin-film flows, on the other hand, usually include sources and sinks of mass both at the upper and lower boundaries and at the upstream or downstream boundaries.
+Geophysical thin-film flows, on the other hand, usually include sources and sinks of mass both at the upper and lower boundaries and at the upstream or downstream boundaries.
 For example, ice is advected out of the calving terminus; ice is removed from the base of a floating ice shelf by ocean melt; and ice accumulates at the surface from firn densification.
-These are very much open systems and a conventional Eulerian approach to numerical modeling, which focuses on control volumes that are fixed in space, ignores some of the hard parts.
+Lava is extruded above the earth from an erupting volcano, and material is removed from the surface and base by solidification through heat losses to the air and ground.
+These are very much open systems and a conventional approach to numerical modeling, which focuses on control volumes that are fixed in space, ignores some of the hard parts.
 For example, the densification of ice into firn is a source of mass.
-But that mass also carries with it internal energy.
-A conventional numerical modeling approach might account for the first but not the second.
-To see how this plays out in the wild, look at any software package for ice flow modeling.
-The mass balance equation will of course include the accumulation and ablation rates as inputs.
-Does the heat flow or energy balance equation also include these quantities as inputs?
+But that mass also carries with it thermal energy.
+A conventional numerical modeling approach always accounts for the first but not the second.
+The spirit of the physics is captured much better by a discretization approach that is fixed (Eulerian) in the horizontal but moving (Lagrangian) in the vertical.
 
-\subsection{DG semi-discretization}
+The full derivation of the model from a conservation law is in the appendix.
+Here we present only the variational form that we will work with.
+We assume in all cases that the 3D spatial domain is extruded in the vertical dimension from a 2D footprint domain $\Omega$.
+So given the bed and surface elevation $b$ and $s$ and a fluid thickness $h = s - b$, the Cartesian vertical coordinate is instead expressed as $z = b + h\zeta$ where $\zeta$ ranges between 0 and 1.
+We let $J$ be the derivative of the transformation from terrain-following to Cartesian coordinates and $J^{-1}$ its inverse.
 
-The model that we will derive below can be viewed as follows:
-\begin{enumerate}
-    \item Rewrite the heat equation in terrain-following coordinates, i.e. replace the vertical coordinate $z$ with the remapped coordinate
-        \begin{equation}
-            \zeta = \frac{z - b}{h}
-            \label{eq:terrain-following-coords}
-        \end{equation}
-        where $b$ is the elevation of the ice base and $h$ the thickness of the ice layer (see \S5.7.1 of \citet{greve2009dynamics})
-    \item Discretize the heat equation using a piecewise constant discontinuous Galerkin basis in the vertical dimension
-\end{enumerate}
-Our main innovation below is incorporating mass transport into the energy balance equation, but getting the conductive heat transport correct is not entirely obvious.
-We require that our model reproduces the vertical DG semi-discretization in order to make sure that the conductive heat transfer terms are correct.
-We suppose that the starting point is the variational form
-\begin{equation}
-    \int_b^s\left(\frac{\partial E}{\partial t}\phi + k\frac{\partial T(E)}{\partial z}\cdot\frac{\partial\phi}{\partial z} + \ldots\right)dz = 0
-\end{equation}
-for all test functions $\phi$ where the ellipses stands for other terms.
-We then use the coordinate transformation from equation \eqref{eq:terrain-following-coords} to rewrite this variational problem as
-\begin{equation}
-    \int_0^1\left(h\frac{\partial E}{\partial t}\phi + kh^{-1}\frac{\partial T(E)}{\partial\zeta}\frac{\partial\phi}{\partial\zeta} + \ldots\right)d\zeta = 0.
-\end{equation}
-Next, we assume that the internal energy $E$ is expanded using the $DG_p$ basis and use a symmetric interior penalty discretization of the above variational problem:
+\subsection{Mass balance}
+
+Let $\phi$ be an arbitrary test function.
+The variational form of the mass balance equation for the fluid thickness $h$ is
 \begin{align}
-    0 & = \sum_n\int_{\zeta_n}^{\zeta_{n + 1}}\left(h\frac{\partial E}{\partial t}\phi + kh^{-1}\frac{\partial T(E)}{\partial\zeta}\frac{\partial\phi}{\partial\zeta} + \ldots\right)d\zeta \nonumber\\
-    & \quad + \sum_{\zeta_n}\left(\left\llbracket kh^{-1}\frac{\partial T(E)}{\partial\zeta}\right\rrbracket \cdot\llbracket\phi\rrbracket + \llbracket T(E)\rrbracket\cdot\left\llbracket kh^{-1}\frac{\partial\phi}{\partial\zeta}\right\rrbracket\right)\nonumber\\
-    & \qquad + \sum_{\zeta_n}\frac{\alpha}{\delta\zeta}\llbracket kh^{-1}T(E)\rrbracket\cdot\llbracket\phi\rrbracket
+    0 & = \int_\Omega\left\{\frac{\partial h}{\partial t}\phi - h\bar u\cdot\nabla\phi - (\dot a_s - \dot a_b)\phi\right\}dx \nonumber\\
+    & \qquad + \int_{\Gamma_{\text{in}}}h_\Gamma \bar u_\Gamma\cdot n\,\phi\;d\sigma + \int_{\Gamma_{\text{out}}}h\bar u\cdot n\,\phi\;d\sigma
 \end{align}
-where $\alpha = \max\{1, p^2\}$ is a penalty parameter dependent on the degree of the finite element basis and the double brackets denote the jump of a quantity across one of the knot points:
-\begin{equation}
-    \llbracket f\rrbracket = \lim_{\zeta\downarrow\zeta_n}f(\zeta) - \lim_{\zeta\uparrow\zeta_n}f(\zeta).
-\end{equation}
-If we use the lowest order basis possible, i.e. piecewise constant basis functions, then any terms containing vertical derivatives are zero and we are left with the much simpler form
-\begin{equation}
-    0 = \sum_n\int_{\zeta_n}^{\zeta_{n + 1}}\left(h\frac{\partial E}{\partial t}\phi + \ldots\right)d\zeta + \sum_{\zeta_n}\frac{\alpha}{\delta\zeta}\llbracket kh^{-1}T(E)\rrbracket\cdot\llbracket\phi\rrbracket
-\end{equation}
-Our model has to reduce to the previous equation when there are no sources or sinks of mass and all heat transfer is by conduction.
+where $\bar u$ denotes the depth-averaged fluid velocity.
 
+\subsection{Momentum balance}
 
-\subsection{The model in conservation form}
-
-The equation we derive uses an Eulerian reference frame in the horizontal but Lagrangian in the vertical.
-In so doing, the mass balance equation and the effect of accreting or ablating ice is included in the energy equation as well.
-
-The model we derive here is a conservation law for the product of the thickness $h$ and the energy density $E$ in a single layer of the glacier.
-Moreover, we assume that horizontal diffusion is negligible, so that transport is dictated by the bulk ice velocity $u$.
-The overall model will then take the form
-\begin{equation}
-    \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma + \int_{\partial\omega\cap\Gamma}h_{\text{in}}E_{\text{in}}u\cdot\nu\;d\gamma= \int_\omega\text{sources}\;dx
-\end{equation}
-where $\omega$ is an arbitrary control volume, $\partial\omega$ its boundary, $\nu$ the unit outward-pointing normal vector to $\partial\omega$, and $\Gamma$ is the segment of $\partial\Omega$ where ice is flowing in, i.e. $u\cdot\nu < 0$.
-We will fill in the sources in the following.
-In the most blunt version of the model, the single layer is the entire glacier.
-We might refine this model by using two layers, say one for basal temperate ice and another for cold ice.
-We could then subdivide each part into further layers.
-For starters, it's enough to imagine that we're devising an approximate model for the evolution of $h\cdot E$ throughout the whole glacier.
-
-To complete our description of the model, we need to describe what the sources and sinks of thickness-energy are.
-Let $\dot a$ be the accumulation rate of mass in meters/year and $E_{\dot a}$ the internal energy of the accumulated ice mass.
-For example, if we assume mass is added to the ice layer by densification of firn, then in Antarctica a reasonable rate in the interior of the continent might be $\dot a$ = 7 cm/year and $E_{\dot a}$ is the product of the ice density, specific heat capacity at constant pressure, and the temperature at the base of the firn column, which is typically on the order of 243${}^\circ$K.
-Likewise, let $\dot m$ be the rate of mass ablation and $E_{\dot m}$ the internal energy of the ablated ice mass.
-Then the sources and sinks due to accumulation and ablation are
-\begin{equation}
-    \text{mass exchange sources} = \dot a\,E_{\dot a} - \dot m\,E_{\dot m}.
-\end{equation}
-It's worth pointing out here that, even in the absence of ablation, the accumulation of mass can make the average energy $E$ of the column decrease provided that the accumulated ice has a lower internal energy than the rest of the column, despite the fact that the total thickness-energy product is increasing.
-Finally, we want to emphasize here that the accumulation and ablation rates are for this computational layer.
-If we are taking the layer to be the entire ice column, then these are the same as the actual accumulation and ablation rates, but if we are taking a single layer to be, say, the layer of temperate ice at the base of a polythermal glacier, then the accumulation rate for the temperate layer is the same as the rate at which is melted off from the surface cold layer.
-
-The next component that remains is to describe the sources and sinks of thickness-energy due to conductive exchange with the external environment.
-For example, a glacier experiencing no accumulation or ablation will lose heat to the atmosphere in the winter.
-We assume that the medium above the ice layer is at temperature $T_{\uparrow}$ and that the exchange coefficient with the layer above is $\sigma_{\uparrow}$, and likewise for the layer beneath.
-Then the sum rate of conductive exchange is
-\begin{equation}
-    \text{conductive exchange sources} = h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}
-\end{equation}
-where $T(E)$ is the temperature of the medium as a function of its internal energy density and $k$ is the thermal conductivity of ice.
-
-The final volumetric source term is strain heating, which has a comparatively simple expression:
-\begin{equation}
-    \text{strain heating sources} = h M : \dot\varepsilon
-\end{equation}
-where $M$ is the membrane stress tensor and $\dot\varepsilon$ is the strain rate tensor for the flow field.
-We assume that the ice velocity is constant with depth in each layer.
-
-Putting everything together now, the complete conservation law for the thickness-energy product is
+Let $U$ and $L$ be characteristic velocity and length scales for the problem.
+We assume that the Reynolds number $\text{Re} = \rho UL/\mu$ is small enough that we can neglect inertial terms in the Navier-Stokes equations.
+The Stokes equations in terrain-following coordinates are
 \begin{align}
-    & \frac{\partial}{\partial t}\int_\omega hE\;dx + \int_{\partial\omega}hEu\cdot\nu\;d\gamma = \nonumber\\
-    & \qquad \int_\omega h M:\dot\varepsilon\;dx + \int_\omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)dx \nonumber\\
-    & \qquad + \int_\omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}dx
+    0 & = \int_\Omega\int_0^1\left\{2 h\mu\,\dot\varepsilon(u):\dot\varepsilon(v) - p\nabla\cdot hv - q\nabla\cdot hu - \rho gh\cdot v\right\}d\zeta\,dx \nonumber\\
+    & \qquad\qquad +\int_\Omega \gamma u\cdot v\big|_{\zeta = 0}\,dx
 \end{align}
-If we apply this model to many layers of ice, assuming that the energy density is constant within each layer, we reproduce the symmetric interior penalty DG discretization of the heat transport problem provided that we take the (non-dimensional) exchange coefficients between ice layers to be equal to 1.
-For conductive heat exchange with, say, air in the turbulent atmospheric boundary layer, we may want to use a much larger exchange coefficient.
+The second summand enforces condition that, along the ice base, $(\tau - pI)\cdot n = -\gamma u$.
+This is a Robin boundary condition.
+Across the basal interface, the energy balance equation determines the vertical velocity.
+The vertical velocity is zero when there are no losses at the fluid base, and is determined by the heat flux supplied to or from the fluid when it is at the melting temperature.
+In short, we apply Dirichlet conditions normal to the boundary and Robin boundary conditions in the tangential direction.
+The boundary condition at the ice surface is stress-free.
 
+We emphasize that the expression for the strain rate tensor in terrain-following coordinates is not the same as in Cartesian coordinates.
+Letting
+\begin{equation}
+    J = \left[\begin{matrix} I & 0 \\ \nabla b + \zeta\nabla h & h \end{matrix}\right]
+\end{equation}
+be the derivative of the transformation from terrain-following to Cartesian coordinates, the strain rate tensor is
+\begin{equation}
+    \dot\varepsilon(u) = \frac{1}{2}\left(\nabla(Ju)J^{-1} + J^{-*}\nabla(Ju)^*\right)
+\end{equation}
+where all gradients are taken in terrain-following coordinates.
 
-\subsection{The model in variational form}
-
-We can now use standard methods to derive a variational form of the model.
-Let $\phi$ be an arbitrary test function; the variational form is
+The Stokes equations are the most principled model for momentum balance in the types of problems we consider.
+But a number of simplifications are possible.
+The ratio of the horizontal to the vertical extent for many geophysical fluid flows is usually on the order of 1/20 or less.
+Using a perturbative expansion in the aspect ratio and taking only the lowest-order terms leads to a simpler model.
+The terminology for this simpler model varies depending on the discipline; here we refer to it as the first-order model.
+It can be obtained by eliminated the $\tau_{12}$ and $\tau_{13}$ terms from the vertical part of the momentum balance equation.
+What is left can be rewritten to express the pressure in terms of the surface elevation and the diagonal stress components $\tau_{11}$, $\tau_{22}$.
+Additionally, the vertical velocity is eliminated from the problem entirely; it can be calculated again from the boundary condition and the fact that the velocity field is divergence-free.
+The variational form of the first-order model is
 \begin{align}
-    & \int_\Omega \left(\frac{\partial}{\partial t}hE\cdot\phi - hEu\cdot\nabla\phi\right)dx = \nonumber\\
-    & \qquad \int_\Omega h M:\dot\varepsilon\cdot\phi\;dx + \int_\Omega\left(\dot a\cdot E_{\dot a} - \dot a\cdot E_{\dot m}\right)\phi\;dx \nonumber\\
-    & \qquad + \int_\Omega h^{-1}k\left\{\sigma_{\uparrow}(T_{\uparrow} - T) + \sigma_{\downarrow}(T_{\downarrow} - T)\right\}\phi\;dx \nonumber\\
-    & \quad\qquad - \int_{\partial\Omega}\Big\{h_{\text{in}}E_{\text{in}}\min\{0, u\cdot\nu\} + hE\max\{0, u\cdot\nu\}\Big\}\phi\;d\gamma
+    0 & = \int_\Omega\int_0^1\left\{h\mu\dot\varepsilon(u) :\mathscr{C}\dot\varepsilon(v) + h^{-1}\mu\frac{\partial u}{\partial\zeta}\cdot\frac{\partial v}{\partial\zeta} - \rho g(1 - \zeta)\nabla s\cdot v\right\}d\zeta\,dx \nonumber\\
+    & \qquad\qquad + \int_\Omega \gamma u\cdot v\big|_{\zeta = 0}\;dx
 \end{align}
-This form will work so long as the layer thickness is positive.
-In the limit of zero thickness, almost every term becomes negligible.
-The final, conductive term forces the temperature to be a weighted average of the temperatures in the media above and below.
-But trying to solve this singular problem in floating-point arithmetic is asking for trouble.
-One option might be to replace the factor of $h^{-1}$ with something like $\max\{h, h_c\}^{-1}$ where $h_c$ is some critical cut-off thickness, say 1m, below which it isn't important to resolve heat transport with precision.
+where $\mathscr{C}$ is a rank-4 tensor such that
+\begin{equation}
+    \mathscr{C}\dot\varepsilon = \dot\varepsilon + \text{tr}(\dot\varepsilon)I.
+\end{equation}
+\textcolor{red}{Check factors of 2.}
 
-Is there an alternative variational form that remains well-posed even in the limit of zero ice thickness?
+Finally, the first-order equations can be further simplified by assuming that either horizontal extensional stresses or vertical shear stresses are dominant.
+Note that this approximation does not follow from the low aspect ratio -- it is a second perturbative expansion in the parameter $\frac{\partial u}{\partial x} / h^{-1}\frac{\partial u}{\partial\zeta}$.
+In either case, we can depth-average the first-order equations to arrive at a 2D equation set for $\bar u$.
+When the horizontal stresses dominate, we get an elliptic system of PDEs for the horizontal velocities.
+When the vertical stresses dominate, the derivative terms are eliminated completely and we are left with a purely local expression for the depth-averaged velocity in terms of the surface slope.
+
+For modeling lava flow, it is common to assume that the vertical shear stresses dominate.
+In glaciology, vertical shear stresses dominate in the interior of ice sheets, while horizontal stresses are most important in fast-flowing ice streams.
+
+\subsection{Energy balance}
+
+Let $\psi$ be an arbitrary test function.
+We make the simplifying assumption that diffusive transport of heat is small compared to advective transport in the horizontal directions, i.e. that the P\'eclet number is small.
+We do not make this assumption in the vertical dimension, where both effects can be equally important.
+The primal variational form of the energy balance equation is
+\begin{align}
+    0 & = \int_\Omega\int_0^1\left(h\frac{\partial E}{\partial t}\psi - hEu\cdot\nabla\psi + h^{-1}k\frac{\partial T}{\partial\zeta}\frac{\partial\psi}{\partial\zeta} - hQ\psi\right)d\zeta\,dx \nonumber\\
+    & \qquad +\int_{\Gamma_{\text{in}}}\int_0^1h_\Gamma E_\Gamma u_\Gamma\cdot n\,\psi\;d\zeta\,d\sigma + \int_{\Gamma_{\text{out}}}\int_0^1 hEu\cdot n\,\psi\;d\zeta\,d\sigma \nonumber \\
+    & \quad\qquad + \int_\Omega\left\{\left(\dot a_sE_s - f_s\right)\psi\big|_{\zeta = 1} - \left(\dot a_bE_b - f_b\right)\psi\big|_{\zeta = 0}\right\}\,dx
+    \label{eq:energy-balance}
+\end{align}
+The final integral is the flux of thermal energy into the system at the fluid surface and base.
+These include fluxes due to accumulation or ablation of material (the $\dot a_sE_s$ and $\dot a_bE_b$ terms) and conductive or radiative fluxes at either surface ($f_s$, $f_b$).
+These fluxes have to be known functions of the state of the medium and its exterior but are problem-dependent.
+We describe the different cases below.
+The important and general point in all cases is that \textbf{the energy balance at the surface and base of the fluid affects the net mass balance} whenever the temperature is close to the melting point.
+
+We have used the internal energy $E$ of the medium as the field variable instead of the temperature $T$ in order to better handle phase changes.
+Once a material reaches its melting point, the addition of heat no longer raises its temperature but instead contributes to the latent heat necessary to change phase.
+Using the temperature as a field variable would require the introduction of an additional variable in order to handle phase transitions.
+We assume that the specific heat capacity of the medium is a constant throughout the temperature range of interest, in which case the energy density is
+\begin{equation}
+    E = \rho(c_pT + Lm)
+\end{equation}
+where $m$ is the fraction of material of the other phase (solid rock for lava flows, water for ice).
+We can then invert this relation to write the temperature as
+\begin{equation}
+    T = \min\{T_m, E/\rho c_p\}.
+\end{equation}
+Phase change can result in mass gains or losses.
+For example, consider a floating ice shelf in thermal contact with the ocean or a lake.
+If the water is sufficiently warm and salty then it can melt away at the bottom of the ice shelf.
+But if the bulk of the water mass was mostly near 0${}^\circ$C then it can instead freeze onto the bottom of the shelf.
+Likewise, lava cools upon contact with the ground underneath it, and ordinarily it will solidify.
+Although this is rare \textcolor{red}{cite}, it can also be hot enough to melt the ground, and this liquified material then flows downstream.
+
+Mathematically, there are two cases to consider: (1) the fluid medium only reaches the melting temperature at the boundary, and the temperature gradient at the boundary is non-zero, and (2) the fluid medium is at the melting point over a finite interval, and thus the temperature gradient at the boundary is equal to zero.
+In the first case, the exterior is undergoing phase changes and the fluid medium is gaining mass; in the second case, the fluid medium is undergoing phase changes and is losing mass.
+
+Consider just the fluid base for now.
+Heat flux balance gives
+\begin{equation}
+    \rho L\dot a_b = h^{-1}k\partial_\zeta T + f_b + \gamma|u|^2
+\end{equation}
+where $f_b$ is the external heat flux.
+(If we know the temperature in the external medium, then $f_b = -k_\Gamma\nabla T_\Gamma\cdot n$.)
+The final term accounts for heat from sliding friction.
+Remember that for melting of ice the temperature gradient is negative and the heat flux is positive, while for lava flow the temperature gradient is positive and the heat flux is negative.
+In both cases, when the temperature gradient in the fluid is non-zero, some of the heat energy is used to change the temperature of the fluid and thus reduces the rate of phase change.
+When the temperature gradient in the fluid is zero, all of the heat energy at the boundary goes to phase change.
+
+Lava cools down by radiating heat away to the atmosphere; the Stefan-Boltzmann law then says that
+\begin{equation}
+    f_s = \sigma(T^4 - T_s^4)
+\end{equation}
+where $T_s$ is the atmospheric temperature and $\sigma$ is the Stefan-Boltzmann constant.
+However, when the surface cools rapidly enough as to solidify, this solid crust then acts as a thermal insulator.
+The insulation of the solid crust is what makes it possible for lava flows to extend as long as they do.
+\textcolor{red}{Find a citation for this.}
+
+Whether the bed or surface elevation can change in time depends on the medium.
+Ignoring the effect of erosion, the bed elevation does not change for a grounded glacier, but the surface elevation does.
+An ice shelf that floats on the ocean, however, can gain or lose mass at its base.
+A lava flow loses mass by solidification at the base and the surface.
+
+The diffusive part of the variational form in equation \eqref{eq:energy-balance} is proportional to $h^{-1}$.
+This term is singular when the fluid thickness goes to zero.
+Mathematically, the singularity is removable because the vertical derivatives of the solution should also go to zero.
+But this singularity becomes a total disaster in floating-point arithmetic.
+Here we apply an approach that we used in \textcolor{red}{cite the duality paper}.
+Introducing the heat flux $F$ explicitly as an unknown into the problem, we can add another equation as well:
+\begin{equation}
+    hk^{-1}F + \partial_\zeta T(E) = 0.
+\end{equation}
+This equation is still finite even when the fluid thickness goes to zero.
+The resulting equation set is more expensive but the expense can be worth it if it avoids having to use other approaches such as regularization.
+
+
+% ======================
+\section{Discretization}
+
+\subsection{Spatial}
+
+We use continuous Galerkin finite elements for the velocity space since the momentum balance equation is an elliptic problem.
+The mass balance equation, viewed in isolation with the velocity as an input, is hyperbolic, so we use a discontinuous Galerkin basis for its superior stability and non-oscillation properties compared to continuous elements.
+We found in \textcolor{red}{cite the duality paper} that, for a related problem, using CG elements for the thickness gave a solution with obvious oscillatory artifacts while using DG elements did not.
+
+The energy balance equation is of mixed hyperbolic-parabolic type.
+Here we used DG elements as well but with a symmetric interior penalty approach to discretize the diffusive part of the operator.
+\textcolor{red}{Something about energy/flux element pairs...}
+
+We also have to make choices about whether to use higher-order finite elements and fewer vertical layers, or lower-order elements and more vertical layers.
+When the solution is known to be smooth, higher-order elements offer greater accuracy for the same number of degrees of freedom.
+But real scenarios may have non-smooth solutions, for example when the temperature nears the melting point.
+Additionally, the constitutive law for ice has a discontinuity in its 1st derivative around a transition temperature of -10${}^\circ$C.
+Attempting to use high-order polynomials to interpolate this field can result in spurious values that go outside the known range or even go negative.
+In these circumstances, we can instead use a multi-layer model.
+Mass is exchanged among layers according to their temperature range, so for example we might use one layer to represent ice that is below the melting point or lava that is above, and another layer to represent fluid that is at the melting point and awaiting enough latent heat for the transition to another phase.
+
+\subsection{Temporal}
+
+The problem of interest here is a very dissipative differential-algebraic equation.
+This type of problem calls for an L-stable timestepping scheme.
+The prototypical L-stable scheme is backward Euler.
+Here we also apply the Radau-IIA time discretization, of which the backward Euler scheme is the lowest-order variant.
+The Radau-IIA($k$) scheme is of order $2k - 1$ and is stiffly accurate.
+textcolor{red}{Cite the Hairer book.}
+
+
+
+% ======================
+\section{Demonstrations}
+
+\subsection{Verification}
+
+We first test our implementation on several analytically solvable test cases.
+Our initial test cases are much simpler than the norm for a verification exercise.
+We argue that the difficulty of modeling phase change in open systems necessitates starting at a more basic level than is common for numerical modeling of other problem, such as single-phase fluid flow in a fixed geometry.
+
+\subsubsection{Growing fluid column}
+Our first test case does not involve any transport at all but rather a column of fluid that is growing at a fixed rate $\dot a$.
+The fluid has an initial internal energy $E_0$.
+The mass and energy balance equations are
+\begin{align}
+    \partial_t h & = \dot a \\
+    h\partial_t \bar E & = \dot a E_{\dot a}
+\end{align}
+but if we multiply the mass balance equation by $E$ and add the two together we get
+\begin{equation}
+    \partial_t(h\bar E) = \dot a(\bar E + E_{\dot a})
+\end{equation}
+
+\subsubsection{Steady-state advection}
+Now we consider a case with horizontal advection of heat using a fixed velocity field.
+We take
+\begin{equation}
+    u = \left(\begin{matrix}u_0 + \delta u\cdot x / L \\ -\delta u \cdot z / L\end{matrix}\right)
+\end{equation}
+which is divergence-free.
+In order to maintain the free surface at a steady state, we require an accumulation rate of $\dot a = \delta u \cdot H / L$.
+
+\subsubsection{Seasonal variation}
+Here we assume a fluid column with ablation at the base and seasonally-varying accumulation at the surface.
+The mass conservation equation is
+\begin{equation}
+    \partial_th = \dot a - \dot m
+\end{equation}
+where the accumulation rate $\dot a$ is an input we can pick and the melt rate $\dot m$ is computed from the basal boundary condition of the energy balance equation.
+The energy balance equation is
+\begin{equation}
+    h\partial_t E + \partial_\zeta hE\omega - \partial_\zeta h^{-1}k\partial_\zeta T = 0.
+\end{equation}
+The surface boundary condition is
+\begin{equation}
+    hE\omega - h^{-1}k\partial_\zeta T\Big|_{\zeta = 1} = \dot aE_{\dot a}.
+\end{equation}
+The basal boundary condition is
+\begin{equation}
+    hE\omega - h^{-1}k\partial_\zeta T\Big|_{\zeta = 0} = q
+\end{equation}
+and finally
+\begin{equation}
+    h\omega = \begin{cases}0 & T < T_m \\ q/\rho L & T = T_m\end{cases}
+\end{equation}
+
+We pick the accumulation rate to be a periodic function of time:
+\begin{equation}
+    \dot a = \dot a_0 + \delta\dot a\cdot\cos(2\pi t).
+\end{equation}
+For the system to approach some steady limit cycle, we need the basal flux to supply enough heat to melt all the fluid that is accumulated at the surface:
+\begin{equation}
+    q = \dot a_0 E_{\dot a} / \rho L
+\end{equation}
+where $\rho$ is the material density and $L$ the latent heat of melting \textcolor{red}{the units are wrong but it's something like this}.
+
+\subsection{Mass-momentum balance}
+
+Our first test case is to evaluate our solver for the coupled mass and momentum balance without accounted for thermal effects yet.
+Here we compare two numerical setups: (1) a splitting method, which alternates separate updates of the mass and momentum balance equations, and (2) a monolithic method which updates both simultaneously.
+
+\subsection{Thermally-coupled problem}
+
+Next we add heat flow to the problem.
+First, we assume that the fluid velocity affects the temperature through advection and strain heating, but otherwise the momentum balance equation does not depend on temperature.
+This first exercise is to see if we can effectively simulate the coupled mass-momentum-energy balance problem when the ice thickness can go to zero.
+
+Then we add temperature-dependence to the viscosity coefficient.
+
+\subsection{Phase changes}
+
+Finally, we consider a thermally-coupled problem with phase changes at the surface and base.
+Here we consider several cases which are or are not relevant depending on the medium.
+For glacier flow, when ice melts at the base, we assume that the liquid water is instantly transported into the subglacial drainage system.
+For lava, on the other hand, solidification at the base alters the topography that the lava flows over.
+
+
+\pagebreak
+
+% ===================
+\appendix
+\section{Derivations}
+
+% ----------------------------
+\subsection{Conservation laws}
+
+Let $\phi$ be the density per unit mass of some conserved quantity and suppose that the medium has a bulk velocity $u$.
+Now let $\omega$ be an arbitrary control volume within the spatial domain $\Omega$.
+It is customary to assume that $\omega$ is fixed in time; here we will instead assume that the boundary of $\omega$ is moving at some speed $v$.
+We emphasize that the bulk velocity of the medium need not be the same as the velocity of the control volume boundary.
+The general form of a conservation law for $\phi$ is
+\begin{equation}
+    \frac{d}{dt}\int_\omega \rho\phi\;dx + \int_{\partial\omega}\left\{\rho\phi (u - v) + F\right\}\cdot n\; d\sigma = \int_{\partial\omega\cap\partial\Omega}f\cdot n\;d\sigma + \int_\omega q\;dx
+\end{equation}
+where $F$ is the non-advective flux of $\phi$, $f$ are the fluxes from the boundaries of the domain, $q$ are the volumetric sources.
+In a fixed or purely Eulerian reference frame, the control volumes do not move at all, i.e. $v = 0$.
+In a material or purely Lagrangian reference frame, the control volumes move with the material, i.e. $v = u$, which eliminates the advective fluxes entirely.
+
+For conservation laws in either a purely fixed or material reference frame, there is a rote procedure to derive a variational form.
+We will describe the case of a fixed reference frame first.
+Let $\psi$ be an arbitrary test function.
+Consider the control volume $\omega = \{x \in \Omega : \psi(x) \ge \alpha\}$, i.e. the super-level set of $\psi$.
+As a shorthand we will write this as $\{\psi \ge \alpha\}$.
+The boundary of this set is $\{\psi = \alpha\}$ and the outward-pointing normal vector is $n = -\nabla \psi/|\nabla \psi|$.
+The conservation law then gives
+\begin{align}
+    & \frac{d}{dt}\int_{\{\psi \ge \alpha\}}\rho\phi\;dx - \int_{\{\psi = \alpha\}}\left\{\rho\phi u + F\right\}\cdot \frac{\nabla\psi}{|\nabla\psi|}\;d\sigma \nonumber\\
+    & \qquad\qquad\qquad = \int_{\{\psi \ge \alpha\}\cap\partial\Omega}f\cdot n\;d\sigma + \int_{\{\psi \ge \alpha\}}q\;dx \label{eq:conservation-law-superlevel-set}
+\end{align}
+Next, we integrate both sides of the previous equation with respect to $\alpha$ and interchange the time derivative and the integral:
+\begin{align}
+    & \frac{d}{dt}\int_{-\infty}^\infty\int_{\{\psi \ge \alpha\}}\rho\phi\;dx\,d\alpha - \int_{-\infty}^\infty\int_{\{\psi = \alpha\}}\left\{\rho\phi u + F\right\}\cdot \frac{\nabla\psi}{|\nabla\psi|}\;d\sigma\;d\alpha \nonumber\\
+    & \qquad\qquad\qquad = \int_{-\infty}^\infty\int_{\{\psi\ge\alpha\}\cap\partial\Omega}f\cdot n\;d\sigma\;d\alpha + \int_{-\infty}^\infty\int_{\{\psi \ge \alpha\}}q\;dx\;d\alpha
+\end{align}
+The real crux of the argument is to rewrite everything with the help of the \emph{area} and the \emph{co-area} formulas.
+The area formula states that, for any integrable function $g$,
+\begin{equation}
+    \int_\Omega g\psi\;dx = \int_{-\infty}^\infty\int_{\{\psi\ge\alpha\}}g\;dx\;d\alpha.
+\end{equation}
+The co-area formula states that, for any integrable vector field $v$,
+\begin{equation}
+    \int_\Omega g|\nabla\psi|\;dx = -\int_{-\infty}^\infty\int_{\{\psi=\alpha\}}g\;d\sigma\;d\alpha.
+\end{equation}
+The application of the area formula is straightforward.
+To apply the co-area formula, we take $g = (\rho\phi u + F)\cdot\nabla\psi / |\nabla\psi|$.
+Finally, we can move the time derivative under the integral sign because we assume (for now) that $\psi$ does not change in time.
+We then arrive at the usual variational form
+\begin{align}
+    & \int_\Omega\left(\frac{\partial}{\partial t}(\rho \phi)\cdot \psi - (\rho \phi u + F)\cdot\nabla\psi\right)dx \nonumber\\
+    & \qquad\qquad = \int_\Omega q\,\psi\;dx + \int_{\partial\Omega}f\cdot n\;\psi\;d\sigma.
+\end{align}
+
+All of the argument above assumed that the control volumes are fixed in space.
+We can go through the same procedure when the control volumes are material elements, i.e. $u = v$ everywhere.
+What happens when $v$ is not zero, but also not equal to $u$?
+Here almost the entire argument is the same as before, we just have to observe that
+\begin{equation}
+    \frac{d}{dt}\int_\omega\rho\phi\;dx = \int_\omega\frac{\partial}{\partial t}(\rho\phi)\;dx + \int_{\partial\omega}\rho\phi\,v\cdot n\;d\sigma.
+\end{equation}
+(To get some intuition for this formula, you can first imagine a density that does not change in space or time, but with a growing control volume.)
+If we apply this expression and interchange the time derivative and integral before equation \eqref{eq:conservation-law-superlevel-set}, then we end up at the same variational form.
+
+
+% ----------------------------------------
+\subsection{Terrain-following coordinates}
+
+First, we will describe general curvilinear coordinate systems, and then introduce terrain-following coordinates.
+We use $x$ to denote Cartesian coordinates and $\xi$ to denote the curvilinear coordinate systemand we assume that the two can be expressed as functions of each other, so that $x = x(\xi)$ and $\xi = \xi(x)$.
+We let
+\begin{equation}
+    J = \frac{dx}{d\xi}
+\end{equation}
+be the derivative of the transformation from curvilinear to Cartesian coordinates and $J^{-1} = d\xi/dx$ the inverse.
+To express a problem in another coordinate system, we need to (1) describe how vector and tensor fields and derivatives transform, and (2) how integrals transform.
+
+Let $u_x$ be the velocity field in Cartesian coordinates and $u_\xi$ the the velocity in curvilinear coordinates.
+These vector fields are derivatives of trajectories in space, so that $u_x = dx/dt$ and $u_\xi = d\xi/dt$.
+The chain rule then gives
+\begin{equation}
+    u_x = \frac{dx}{dt} = \frac{dx}{d\xi}\frac{d\xi}{dt} = Ju_\xi.
+\end{equation}
+Now if $\phi$ is some field then the chain rule also tells us that its differential is
+\begin{equation}
+    \frac{d\phi}{dx} = \frac{d\phi}{d\xi}\frac{d\xi}{dx} = \frac{d\phi}{d\xi}J^{-1}.
+\end{equation}
+In other words, vector fields transform contravariantly (multiplication on the left by $J$) while derivatives transform covariantly (multiplication on the right by $J^{-1}$).
+The expression for higher-rank tensors becomes more complicated.
+By systematically applying the rules for transformation of vectors and derivatives, the strain rate tensor becomes
+\begin{align}
+    \dot\varepsilon_x & = \frac{1}{2}\left(\nabla_xu_x + \nabla_xu_x^*\right) \nonumber \\
+    & = \frac{1}{2}\left(\nabla_\xi(Ju_\xi)J^{-1} + J^{-*}\nabla_\xi(Ju_\xi)^*\right)
+\end{align}
+in curvilinear coordinates.
+Finally, any integrals with respect to $dx$ become integrals with respect to $\det J\;d\xi$.
+
+Terrain-following coordinates are a particular choice of curvilinear coordinate system that we can use in certain geometries.
+In free-surface fluid flows, the spatial domain can be described as
+\begin{equation}
+    \Omega = \{(x, z) : x \in \Phi, b(x) \le z \le s(x)\}
+\end{equation}
+for some 2D footprint domain $\Phi$.
+The terrain-following coordinates are defined as
+\begin{equation}
+    \left(\begin{matrix}\xi_1 \\ \xi_2 \\ \xi_3\end{matrix}\right) = \left(\begin{matrix} x_1 \\ x_2 \\ \frac{x_3 - b(x_1, x_2)}{h(x_1, x_2)}\end{matrix}\right).
+\end{equation}
+We can then write the reverse transformation as
+\begin{equation}
+    \left(\begin{matrix} x_1 \\ x_2 \\ x_3\end{matrix}\right) = \left(\begin{matrix}\xi_1 \\ \xi_2 \\ b(\xi_1, \xi_2) + h(\xi_1, \xi_2)\xi_3\end{matrix}\right).
+\end{equation}
+In Cartesian coordinates, $x_3$ ranges over the values $b(x_1, x_2)$ and $s(x_1, x_2)$, which vary from point to point.
+In terrain-following coordinates, however, $\xi_3$ ranges from 0 to 1 everywhere.
+We can thus write the image of $\Omega$ under the curvilinear coordinate transformation as the Cartesian product of the footprint domain $\Phi$ and the interval $[0, 1]$.
+Now we can calculate the derivatives explicitly:
+\begin{align}
+    J & = \frac{dx}{d\xi} = \left[\begin{matrix}I & 0 \\ \nabla b + \xi_3\nabla h & h\end{matrix}\right] \\
+    J^{-1} & = \frac{d\xi}{dx} = \left[\begin{matrix} I & 0 \\ -h^{-1}\{\nabla b - \xi_3\nabla h\} & h^{-1}\end{matrix}\right]
+\end{align}
+A few things are worth noting here.
+First, the right weighting factor to put in any integrals is $\det J = h$.
+Next, the final row of $J^{-1}$ has factors of $h^{-1}$.
+The fact that these terms are singular in the limit of zero fluid thickness will motivate some of our later choices.
+Finally, since both $b$ and $h$ only depend on the horizontal coordinates, we can write ``$\nabla b$'' and ``$\nabla h$'' without a subscript to specify which coordinate system we're taking the gradient in because their expressions are the same in both.
+
+Now we can rewrite the expression for the energy balance equation in terrain-following coordinates:
+\begin{align}
+    0 & = \int_\Phi\int_0^1 h\left\{\frac{\partial E}{\partial t}\phi - Eu\cdot\nabla\phi + k\nabla T\cdot J^{-1}J^{-*}\nabla\phi - Q\phi\right\}d\zeta\,dx \\
+    & \qquad - \int_\Phi\dot aE_{\dot a}\phi\Big|_{\zeta=1} dx + \int_\Phi\dot mE_{\dot m}\phi\Big|_{\zeta = 0}dx + \int_{\partial\Phi}\int_0^1 hEu\cdot n\;\phi\;d\zeta\,d\sigma.
+\end{align}
+The effect of the terrain-following coordinates is to introduce an extra weighting factor of $h$ and to change the diffusive term.
+The result still looks similar to the usual convection-diffusion equation, but with an anisotropic diffusivity term.
 
 
 \pagebreak
