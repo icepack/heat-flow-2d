@@ -288,11 +288,11 @@ In addition to the coupled balance equations, the film thickness must also remai
 The common approach to maintaining positivity in glacier flow models is to solve the mass balance equation separately, allowing for the possibility that the thickness may go negative.
 The thickness field is then clamped below at 0.
 This clamping approach introduces a positive mass conservation error.
-\textcolor{red}{Cite Bueler} has instead proposed an approach based on directly imposing this constraint as a variational inequality or complementarity problem.
+\citet{bueler2021conservation} has instead proposed an approach based on directly imposing this constraint as a variational inequality or complementarity problem.
 This approach works for \textcolor{red}{DG(0) and CG(1)} finite elements because there is a direct relationship between positivity of the coefficients in this basis and the positivity of the function.
 This relationship no longer exists for higher-degree finite elements using the usual Lagrange basis.
 
-\textcolor{red}{Cite Rob K} has proposed using the Bernstein instead of the Lagrange finite element basis for positivity-constrained problems.
+\citet{kirby2024high} proposed using the Bernstein instead of the Lagrange finite element basis for positivity-constrained problems.
 If the coefficients of a polynomial in the Bernstein basis are positive, then so is the polynomial.
 The converse is not true for any particular mesh but it becomes true in the limit of mesh refinement.
 Here we explore using both Lagrange and Bernstein finite elements and evaluate the effect on the solution.
@@ -305,8 +305,7 @@ The problem of interest here is a very dissipative differential-algebraic equati
 This type of problem calls for an L-stable timestepping scheme.
 The prototypical L-stable scheme is backward Euler.
 Here we also apply the Radau-IIA time discretization, of which the backward Euler scheme is the lowest-order variant.
-The Radau-IIA($k$) scheme is of order $2k - 1$ and is stiffly accurate.
-\textcolor{red}{Cite the Hairer book.}
+The Radau-IIA($k$) scheme is of order $2k - 1$ and is stiffly accurate \citep{hairer1996solving}.
 
 We additionally apply the Bernstein-in-time collocation to ensure positivity throughout the whole time interval.
 \textcolor{red}{Elaborate}.
