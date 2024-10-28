@@ -334,14 +334,98 @@ but if we multiply the mass balance equation by $E$ and add the two together we 
     \partial_t(h\bar E) = \dot a(\bar E + E_{\dot a})
 \end{equation}
 
-\subsubsection{Steady-state advection}
+\subsubsection{Steady advection in 2D}
 Now we consider a case with horizontal advection of heat using a fixed velocity field.
 We take
 \begin{equation}
     u = \left(\begin{matrix}u_0 + \delta u\cdot x / L \\ -\delta u \cdot z / L\end{matrix}\right)
 \end{equation}
 which is divergence-free.
+We leave out diffusion for this test case so that we can write down an analytical solution using the method of characteristics.
 In order to maintain the free surface at a steady state, we require an accumulation rate of $\dot a = \delta u \cdot H / L$.
+
+\subsubsection{Steady phase change in 1D}
+The next test case assesses the ability of the model to handle a phase transition within the fluid column.
+We work from the example in section \S9.3.6 of \citet{greve2009dynamics}.
+This example is described in the book specifically for glacier flow using Glen's flow law with $n = 3$.
+The problem setup makes several simplifications, to the extent that the constitutive law is relevant only in the form of the strain heating term.
+Consequently, we assume the right-hand side is some generic non-negative function and only put in a particular choice at the end.
+The original problem also assumes a fixed temperature at the fluid surface.
+We assume a known flux instead.
+In all other respects the form of the solution we use is identical.
+
+The setup for the test case is follows.
+Heat flow is only in the vertical direction.
+Accumulation occurs at the fluid surface and ablation at the base, so the vertical velocity is negative.
+The material parameters (thermal conductivity, etc.) are all assumed constant.
+The fluid is subject to given fluxes at the surface and base and volumetric heating $Q$, which we assume is a known positive function.
+The differential form of the steady vertical advection-diffusion equation is
+\begin{equation}
+    \frac{\partial}{\partial\zeta} \left(h\omega E - h^{-1}\kappa(E)\frac{\partial E}{\partial\zeta}\right) = hQ.
+\end{equation}
+The surface boundary condition is
+\begin{equation}
+    h\omega E - h^{-1}\kappa(E)\frac{\partial E}{\partial\zeta} = f_s.
+\end{equation}
+We assume additionally that the surface flux can be written as downward advection of material with some internal energy $E_s$, which we assume to be less than the melting temperature:
+\begin{equation}
+    f_s = h\omega E_s \textcolor{red}{+ \frac{\kappa}{h\lambda}(E - E_a)}
+\end{equation}
+\textcolor{red}{and we should probably also see what happens if we use a Robin-type boundary condition with some skin depth $\lambda$.}
+The basal boundary condition, accounting for energy jumps, is
+\begin{equation}
+    -\rho Lh\omega = f_b
+\end{equation}
+which defines the vertical velocity.
+The ODE and two boundary conditions would be enough for a complete specification of the problem in ordinary circumstances.
+Here we are instead solving a free boundary problem where we also have to determine the cold-temperate transition depth $\zeta_m$.
+We assume that the energy is continuous at the cold-temperate transition (i.e. we consider the melting case of the problem in \citet{greve2009dynamics} and not the freezing case).
+This means that
+\begin{equation}
+    E(\zeta_m^+) = E(\zeta_m^-) = \rho cT_m.
+\end{equation}
+We also require the flux to be continuous across the transition.
+In the temperate part of the fluid column, the diffusivity is zero.
+Since the energy values on either side of the free boundary are the same, we are left with
+\begin{equation}
+    -h^{-1}\kappa\frac{\partial E}{\partial\zeta}\Big|_{\zeta_m^+} = 0.
+\end{equation}
+These additional interior conditions complete the specification of the problem.
+
+We'll start by finding the form of the energy above $\zeta_m$.
+Integrating from the surface down and rearranging terms, we first find that
+\begin{equation}
+    h\omega E - h^{-1}\kappa\frac{\partial E}{\partial\zeta} = f_s - \int_\zeta^1 hQ(\zeta')d\zeta'
+\end{equation}
+We introduce the integrating factor $\phi = \frac{h^2\omega}{\kappa}(\zeta - \zeta_m)$ to write
+\begin{equation}
+    e^{\phi}\frac{\partial}{\partial\zeta}e^{-\phi}E = \kappa^{-1}h\left(\int_\zeta^1hQ(\zeta')d\zeta' - f_s\right).
+\end{equation}
+Knowing that $E(\zeta_m^+) = E_m$, we can then integrate again from $\zeta_m$ up to an arbitrary depth $\zeta$:
+\begin{equation}
+    E(\zeta) = e^{\phi(\zeta)}E_m + \kappa^{-1}h\int_{\zeta_m}^\zeta e^{\phi(\zeta) -\phi(\zeta')}\left(\int_{\zeta'}^1h Q(\zeta'')d\zeta'' - f_s\right)d\zeta'.
+    \label{eq:greve-solution}
+\end{equation}
+Our choice of integrating factors guarantee that $E$ satisfies the surface flux boundary condition and the melt condition $E(\zeta_m) = E_m$.
+
+The final problem is to find what depth $\zeta_m$ makes $h^{-1}\kappa\partial_\zeta E(\zeta_m) = 0$.
+From equation \eqref{eq:greve-solution}, the conductive heat flux above the transition depth is
+\begin{equation}
+    h^{-1}\kappa\frac{\partial E}{\partial\zeta}\Big|_{\zeta = \zeta_m} = h\omega E_m - f + h\int_{\zeta_m}^1Q(\zeta)d\zeta.
+\end{equation}
+Recall that the surface flux $f_s$ is equal to $h\omega E_s$.
+Requiring the conductive heat flux to be zero at the transition depth thus has a simple physical interpretation for what determines $\zeta_m$.
+The fluid is cold until strain heating supplies enough thermal energy to raise the temperature from the surface value $E_s$ up to the melting point $E_m$:
+\begin{equation}
+    \int_{\zeta_m}^1Q(\zeta)d\zeta = \omega(E_s - E_m)
+\end{equation}
+We can then solve this equation numerically for $\zeta_m$.
+A phase transition occurs within the fluid column if the solution $\zeta_m$ is positive, which may or may not occur depending on the magnitudes of the input parameters.
+For example, if there is no volumetric heating, then no phase transition will occur.
+
+We assumed accumulation at the surface, ablation at the base, and a negative vertical velocity in the above.
+This scenario would be representative of a grounded glacier that melts from below.
+Almost all of the above applies just as well when we look at lava flow, where mass is instead extruded up from the base and ablates by solidification at the surface.
 
 \subsubsection{Seasonal variation}
 Here we assume a fluid column with ablation at the base and seasonally-varying accumulation at the surface.
