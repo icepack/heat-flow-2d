@@ -193,7 +193,8 @@ The primal variational form of the energy balance equation is
 \begin{align}
     0 & = \int_\Omega\int_0^1\left(h\frac{\partial E}{\partial t}\psi - hEu\cdot\nabla\psi + h^{-1}k\frac{\partial T}{\partial\zeta}\frac{\partial\psi}{\partial\zeta} - hQ\psi\right)d\zeta\,dx \nonumber\\
     & \qquad +\int_{\Gamma_{\text{in}}}\int_0^1h_\Gamma E_\Gamma u_\Gamma\cdot n\,\psi\;d\zeta\,d\sigma + \int_{\Gamma_{\text{out}}}\int_0^1 hEu\cdot n\,\psi\;d\zeta\,d\sigma \nonumber \\
-    & \quad\qquad + \int_\Omega\left\{\left(\dot a_sE_s - f_s\right)\psi\big|_{\zeta = 1} - \left(\dot a_bE_b - f_b\right)\psi\big|_{\zeta = 0}\right\}\,dx
+    & \quad\qquad + \int_\Omega\left(h\omega(E\chi_{\omega\ge 0} + E_a\chi_{\omega \le 0}) - f_s\right)\psi\big|_{\zeta = 1}\,dx \nonumber \\
+    & \qquad\qquad - \int_\Omega\left(h\omega(E\chi_{\omega\le 0} + E_b\chi_{\omega\ge 0}) - f_b\right)\psi\big|_{\zeta = 0}\,dx
     \label{eq:energy-balance}
 \end{align}
 The final integral is the flux of thermal energy into the system at the fluid surface and base.
