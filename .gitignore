@@ -6,6 +6,8 @@
 *.blg
 *.log
 *.pdf
+*.fls
+*.fdb_latexmk
 
 # --------------
 # Python-related

@@ -1,0 +1,198 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+%\usepackage{amsfonts}
+\usepackage{amsthm}
+%\usepackage{amssymb}
+%\usepackage{mathrsfs}
+%\usepackage{fullpage}
+%\usepackage{mathptmx}
+%\usepackage[varg]{txfonts}
+\usepackage{color}
+\usepackage[charter]{mathdesign}
+\usepackage[pdftex]{graphicx}
+%\usepackage{float}
+%\usepackage{hyperref}
+%\usepackage[modulo, displaymath, mathlines]{lineno}
+%\usepackage{setspace}
+%\usepackage[titletoc,toc,title]{appendix}
+\usepackage{natbib}
+\usepackage[makeroom]{cancel}
+\usepackage[only,llbracket,rrbracket]{stmaryrd}
+
+%\linenumbers
+%\doublespacing
+
+\theoremstyle{definition}
+\newtheorem*{defn}{Definition}
+\newtheorem*{exm}{Example}
+
+\theoremstyle{plain}
+\newtheorem*{thm}{Theorem}
+\newtheorem*{lem}{Lemma}
+\newtheorem*{prop}{Proposition}
+\newtheorem*{cor}{Corollary}
+
+\newcommand{\argmin}{\text{argmin}}
+\newcommand{\ud}{\hspace{2pt}\mathrm{d}}
+\newcommand{\bs}{\boldsymbol}
+\newcommand{\PP}{\mathsf{P}}
+\let\divsymb=\div % rename builtin command \div to \divsymb
+\renewcommand{\div}[1]{\operatorname{div} #1} % for divergence
+\newcommand{\Id}[1]{\operatorname{Id} #1}
+
+\title{Of icy streams and fiery torrents}
+\author{Daniel R. Shapero, Robert J. Baraldi}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+Simulating phase change is a challenging free boundary problem that arises in multiple disciplines in the earth sciences.
+The goal of this paper is to describe a new approach to numerical simulation of phase change based on the principle of convex duality.
+We will then apply this method to simulating the flow of glaciers and lava.
+
+The physical law we focus on is global conservation of enthalpy $E$.
+The enthalpy is related to the temperature $T$ of the medium.
+There are two mechanisms of transport: advection by some bulk velocity $u$ and diffusion.
+We assume a general form for volumetric heat sources $Q$ and boundary fluxes $f$ because these will depend on the application.
+For both glacier and lava flow, there are internal heat sources due to viscous dissipation of mechanical energy.
+Lava flows lose heat to the atmosphere at the upper surface by radiation, but can eventually cool to the point of forming an insulating rocky crust at the surface.
+Glaciers gain heat at their upper surface by insolation and the resulting meltwater then runs off the surface.
+
+The first principle we work from is energy conservation.
+Let $\omega$ be a representative volume element.
+We will want to consider the possiblity that $\omega$ is changing in time.
+Let $v$ be the velocity of the boundary of $\omega$ and $n$ the unit outward-pointing normal vector.
+Then the usual transport theorem implies that the rate of change of total enthalpy within $\omega$ is a sum of the flux across the boundary and sources:
+\begin{equation}
+    \frac{\mathrm d}{\mathrm dt}\int_\omega E\ud x + \int_{\partial\omega}\left\{E(u - v) - k\nabla T\right\}\cdot n\ud s = \int_\omega Q\ud x + \int_{\partial\omega\cap\Gamma}f\cdot n\ud s.
+\end{equation}
+Again, we emphasize that the factor of $v$ accounts for the fact that the representative volume element $\omega$ can depend on time.
+
+The main challenge comes from the relation between temperature and enthalpy.
+For a material that does not change phase, the enthalpy is equal to $\rho c T$ where $\rho$ is the material density and $c$ is the specific heat capacity at constant pressure.
+For a material that can change phase, say from solid to liquid, supplying more heat at the melting point does not raise the temperature but instead supplies the latent heat of transformation.
+The effect is to make the enthalpy a multi-valued function of temperature:
+\begin{equation}
+    E(T) = \begin{cases}\rho_s c_s T & T < T_m \\ \rho_l c_l T + \rho_s L & T > T_m \end{cases}
+\end{equation}
+where $L$ is the latent heat of melting.
+We can likewise invert the relationship to express the temperature as a single-valued function of enthalpy:
+\begin{equation}
+    T(E) = \begin{cases}E / \rho_sc_s & E \le \rho_sc_sT_m \\ T_m & \rho_sc_sT_m < E \le \rho_s(c_sT + L) \\ T_m + (E - \rho_sc_sT_m) / \rho_lc_l\end{cases}
+\end{equation}
+The form of the temperature-enthalpy relationship means that the problem is not only nonlinear, but the nonlinearity is discontinuous.
+
+There are a number of by now orthodox methods for solving the Stefan problem.
+First, we can eliminate the temperature from the problem.
+The $\mathrm dE/\mathrm dt$ term in the conservation law is then easy to handle, but the diffusion term $\nabla\cdot k\nabla T(E)$ becomes difficult because $T(E)$ is only piecewise-differentiable.
+Using a variational form allows us to paper over that difficulty at first.
+But in practice the lack of differentiability makes nonlinear solvers converge slowly or not at all.
+The remedy is then to regularize the temperature-enthalpy relationship.
+That approach then leads us to an alternative based on phase-field methods.
+Here an additional field $\phi$ is introduced representing which material phase is present at a given point in space.
+The phase field becomes a coefficient in the heat equation that can be used to interpolate the density, specific heat, thermal conductivity, and latent heat between the two material phases.
+We then devise a balance law for $\phi$ that includes a small parameter $\epsilon$ which controls how much the solid-liquid phase interface is smeared out.
+In the limit as $\epsilon \to 0$, we should recover the original Stefan problem.
+The challenge with phase field methods is that the differential equation for $\phi$ is strongly nonlinear and becomes even more stiff than the diffusion equation.
+
+Here we propose to instead include both $T$ and $E$ as unknowns in the problem.
+In so doing, we will recover in a modified form the gradient flow structure of the heat equation without phase change.
+
+A differential equation for a field $z$ is a gradient flow when there exists some \emph{free energy functional} $F$ such that
+\begin{equation}
+    \frac{\mathrm dz}{\mathrm dt} = -\nabla F(z).
+\end{equation}
+A simple argument using the chain rule shows that the free energy decreases along trajectories.
+With some mild regularity assumptions, the free energy is a global Lyapunov functional, which implies that the system is stable.
+
+This definition of a gradient flow in the purest sense is overly strict.
+For example, if we discretize a gradient flow in space with finite elements, we instead end up with a finite-dimensional system of the form
+\begin{equation}
+    M\frac{\mathrm dz}{\mathrm dt} = -\nabla F(z)
+\end{equation}
+where $M$ is the finite element mass matrix.
+Strictly speak, we can multiply by $M^{-1}$ and define a new, effective free energy.
+But it would be better if we could avoid dirty hacks like that.
+There is a more general class of problems, however, called \emph{generalized} gradient flows.
+A differential equation is a generalized gradient flow if there exists a convex functional $G$ such that
+\begin{equation}
+    \frac{\mathrm d}{\mathrm dt}\nabla G(z) = -\nabla F(z).
+\end{equation}
+We recover the class of ordinary gradient flows when we take $G(z) = \|z\|^2/2$ and the class of gradient flows with a symmetric, positive-definite matrix by taking $G(z) = \|z\|_M^2 / 2$.
+Provided that $G$ is strongly convex, i.e. the second derivative $\nabla^2G$ exists and is strictly positive-definite, then the same argument as above shows that $F$ is decreasing along trajectories.
+
+Suppose that we discretize a generalized gradient flow with the backward Euler method.
+Then after some rearranging the resulting system of equations to solve for the next state $z_{n + 1}$ from the current state $z_n$ is
+\begin{equation}
+    \nabla G(z_{n + 1}) - \nabla G(z_n) + \delta t\cdot \nabla F(z_{n + 1}) = 0.
+\end{equation}
+But this nonlinear system of equations is also an optimization problem:
+\begin{equation}
+    z_{n + 1} = \text{minimize}_z\left\{G(z) - \langle \nabla G(z_n), z\rangle + \delta t\cdot F(z)\right\}.
+\end{equation}
+The objective is a kind of generalized proximal operator, which motivates the connection of the backward Euler discretization to proximal methods in optimization.
+
+The heat equation without advection is a generalized gradient flow with
+\begin{equation}
+    G(T) = \frac{1}{2}\int_\Omega \rho cT^2\ud x, \quad F(T) = \int_\Omega\left(\frac{1}{2}k|\nabla T|^2 - Q\cdot T\right)\ud x.
+\end{equation}
+The heat equation with phase change is also a generalized gradient flow, with the caveat that the functional $G$ is no longer smooth because the temperature-enthalpy relationship is non-differentiable.
+At a purely mechanical level, trying to determine the minimization or gradient flow form of a differential equation amounts to evaluating antiderivatives.
+Since $E(T)$ is piecewise linear, we expect that its antiderivative is piecewise quadratric, with a discontinuity in slope at $T_m$:
+\begin{equation}
+    \mathscr G(T) = \begin{cases}\frac{1}{2}\rho_sc_s(T - T_m)^2 & T \le T_m \\ \frac{1}{2}\rho_lc_l(T - T_m)^2 + \rho_sL(T - T_m) & T > T_m\end{cases}
+\end{equation}
+We could then try to devise a numerical scheme for the Stefan problem by discretizing in time with the backward Euler method.
+But if we do so we are right back where we started: we have a large system of nonsmooth nonlinear equations.
+We know more about its solution in the form of the gradient flow structure but we are no closer to a method to approximating this solution numerically.
+
+The crux of this paper is that we \textbf{can work with \emph{both} the temperature and enthalpy as unknowns}.
+The highest level at which we can view this approach is through convex duality.
+We assumed that the functional $G$ in the generalized gradient flow above is convex, so it has a convex conjugate functional $G^*$.
+The relationship between $G$ and $G^*$ is that their derivatives are inverses of each other:
+\begin{equation}
+    w = \nabla G(z) \Leftrightarrow z = \nabla G^*(w).
+\end{equation}
+We can then rewrite the generalized gradient flow as a \emph{system} of equations:
+\begin{align}
+    \frac{\mathrm dw}{\mathrm dt} & = -\nabla F(z) \\
+    0 & = \nabla G^*(w) - z\nonumber
+\end{align}
+To our knowledge, there is no standard terminology for this problem, so we refer to it as the \emph{dual} gradient flow.
+But first we describe the discretization.
+If we again use the backward Euler method for the differential-algebraic equation above, we arrive at the system
+\begin{align}
+    w_{n + 1} - w_n + \delta t\cdot \nabla F(z_{n + 1}) & = 0 \\
+    z_{n + 1} - \nabla G^*(w_{n + 1}) & = 0.
+\end{align}
+Just like how the backward Euler discretization of a generalized gradient flow is equivalent to a minimization problem, the backward Euler discretization of a dual gradient flow is a saddle point problem:
+\begin{equation}
+    z_{n + 1},\; w_{n + 1} = \text{maximize}_w\,\text{minimize}_z\;\left\{\langle w - w_n, z\rangle - G^*(w) + \delta t\cdot F(z)\right\}.
+\end{equation}
+Saddle-point problems are more challenging to solve numerically than pure minimization problems.
+But depending on the nature of the nonlinearity, $G^*$ can be so much more convenient to work with than $G$ that the extra cost of the saddle-point problem is worth it.
+As we argue below, this is the case for the Stefan problem.
+
+We can compute the conjugate of the enthalpy-temperature relationship by hand:
+\begin{equation}
+    \mathscr G^*(E) = \begin{cases}
+        \frac{1}{2\rho_sc_s}(E - \rho_sc_sT_m)^2 & E \le \rho_sc_sT_m \\
+        0 & \rho_sc_sT_m \le E \le \rho_s(c_sT_m + L) \\
+        \frac{1}{2\rho_lc_l}(E - \rho_s(c_sT_m + L))^2 & E \ge \rho_s(c_sT_m + L)
+    \end{cases}
+\end{equation}
+In the gradient flow formulation of the Stefan problem above, we worked with the multi-valued mapping from temperature to enthalpy.
+By passing to the convex conjugate, we get to instead work with the single-valued mapping from enthalpy to temperature.
+
+There is some similarity between the Stefan problem and other degenerate parabolic equations like the porous medium equation \citep{vazquez2006porous}.
+
+
+\pagebreak
+
+\bibliographystyle{plainnat}
+\bibliography{stefan-problem.bib}
+
+\end{document}
